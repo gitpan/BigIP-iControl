@@ -1,0 +1,67 @@
+BigIP::iControl
+
+This package provides a Perl interface to the F5 BigIP iControl API.
+
+The F5 BigIP iControl API is an open SOAP/XML for communicating with supported 
+F5 BIGIP products.
+
+The primary aim of this package is to provide a simplified interface to an 
+already simple and intutive API and to allow the user to do more with less 
+code.  By reducing the API invocations to methods returning simple types,it is 
+hoped that this module will provide a simple alternative for common tasks.
+
+The secondary aim for this package is to provide a simple interface for 
+accessing statistical data from the iControl API for monitoring, recording, 
+archival and display in other systems.  This objective has largely been 
+obsoleted in v11 with the introduction of new statistical monitoring and 
+display features in the web UI.
+
+This package generally provides two methods for each each task; a raw method 
+typically returning the response as received from iControl and a "stringified"
+method returning a parsed response.
+
+In general, the stringified methods will typically fufill most requirements 
+and should usually be easier to use.
+
+
+INSTALLATION
+
+To install this module, run the following commands:
+
+	perl Makefile.PL
+	make
+	make test
+	make install
+
+SUPPORT AND DOCUMENTATION
+
+After installing, you can find documentation for this module with the
+perldoc command.
+
+    perldoc iControl
+
+You can also look for information at:
+
+    RT, CPAN's request tracker
+        http://rt.cpan.org/NoAuth/Bugs.html?Dist=iControl
+
+    AnnoCPAN, Annotated CPAN documentation
+        http://annocpan.org/dist/iControl
+
+    CPAN Ratings
+        http://cpanratings.perl.org/d/iControl
+
+    Search CPAN
+        http://search.cpan.org/dist/iControl/
+
+
+LICENSE AND COPYRIGHT
+
+Copyright (C) 2011 Luke Poskitt
+
+This program is free software; you can redistribute it and/or modify it
+under the terms of either: the GNU General Public License as published
+by the Free Software Foundation; or the Artistic License.
+
+See http://dev.perl.org/licenses/ for more information.
+
