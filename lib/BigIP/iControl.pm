@@ -1,16 +1,14 @@
 package BigIP::iControl;
 
 use strict;
-no warnings 'redefine';
+use warnings;
 
 use Carp qw(confess croak);
 use Exporter;
 use SOAP::Lite;
 
-use vars qw($VERSION @ISA @EXPORT @EXPORT_OK);
-
-@ISA			= qw(Exporter);
-$VERSION 		= '0.01';
+our @ISA		= qw(Exporter);
+our $VERSION 		= '0.02';
 
 =head1 NAME
 
@@ -114,8 +112,8 @@ our $modules	= {
 					},
 		System		=> 	{
 					ConfigSync	=>	{
-								save_configuration	=> 0,
-								download_configuration	=> 0
+								save_configuration	=> {filename => 1, save_flag => 1},
+								download_configuration	=> {config_name => 1, chunk_size => 1, file_offset => 1}
 								},
 					SystemInfo	=>	{
 								get_system_information	=> 0
@@ -356,13 +354,13 @@ sub BEGIN {
 		"{urn:iControl}System.Statistics.GtmPathStatisticObjectType" 		=> 1,
 	};
 
-	package iControlDeserializer;
-	@iControlDeserializer::ISA = 'SOAP::Deserializer';
+	package BigIP::iControlDeserializer;
+	@BigIP::iControlDeserializer::ISA = 'SOAP::Deserializer';
 
 	sub typecast {
 		my ($self, $value, $name, $attrs, $children, $type) = @_;
 		my $retval = undef;
-		if (! defined $type or ! defined $urn_map->{$type}) {return $retval}
+		if (not defined $type or not defined $urn_map->{$type}) {return $retval}
 		if ($urn_map->{$type} == 1) {$retval = $value}
 		return $retval;
 	}
@@ -412,27 +410,30 @@ The protocol with to use for communications with the iControl API (should be eit
 =cut
 
 sub new {
-	@_ == 11		or croak 'Not enough arguments for constructor';
 	my ($class, %args) 	= @_;
+	@_ == 11		or croak 'Not enough arguments for constructor';
 	my $self 		= bless({}, $class);
 	defined $args{server}	? $self->{server} 	= $args{server}		: croak 'Constructor failed: server not defined';
 	defined $args{username}	? $self->{username} 	= $args{username}	: croak 'Constructor failed: username not defined';
 	defined $args{password}	? $self->{password} 	= $args{password}	: croak 'Constructor failed: password not defined';
 	defined $args{port}	? $self->{port} 	= $args{port}		: croak 'Constructor failed: port not defined';
 	defined $args{proto}	? $self->{proto} 	= $args{proto}		: croak 'Constructor failed: proto not defined';
-	sub SOAP::Transport::HTTP::Client::get_basic_credentials {return $self->{username} => $self->{password}}
-	$self->{_client}	= SOAP::Lite->proxy($self->{proto}.'://'.$self->{server}.':'.$self->{port}.'/iControl/iControlPortal.cgi')->deserializer(iControlDeserializer->new());
+	#sub SOAP::Transport::HTTP::Client::get_basic_credentials {return $self->{username} => $self->{password}}
+	$self->{_client}	= SOAP::Lite	->proxy($self->{proto}.'://'.$self->{username}.':'.$self->{password}.'@'.$self->{server}.':'.$self->{port}.'/iControl/iControlPortal.cgi')
+						->deserializer(BigIP::iControlDeserializer->new());
 	return $self;
 }
 
 sub _set_uri {
 	my ($self, $module, $interface)	= @_;
-	$self->{_client}->uri("urn:iControl:$module/$interface")
+	$self->{_client}->uri("urn:iControl:$module/$interface");
+	return 1
 }
 
 sub _unset_uri {
 	my $self	= shift;
 	undef $self->{_client}->{uri};
+	return 1
 }
 
 sub _get_username {
@@ -526,16 +527,17 @@ sub _request {
 }
 
 sub __get_timestamp {
+	my $time;
 	my %ts;
 	@ts{qw(year month day hour minute second)} = ((localtime(time))[5,4,3,2,1,0]);
 	$ts{year}+=1900;
 	$ts{month}++;
 
 	foreach (keys %ts) {
-		$ts{$_} = __process_timestamp($ts{$_})
+		$time->{$_} = $ts{$_};
 	}
 	
-	return %ts
+	return __process_timestamp($time);
 }
 
 sub __process_timestamp {
@@ -553,9 +555,11 @@ sub __process_statistics {
 
 	my %stat_obj	= (timestamp => __process_timestamp($statistics->{time_stamp}));
 
-	foreach (@{%{@{%{$statistics}->{statistics}}[0]}->{statistics}}) {
-		my $type			= %{$_}->{type};
-		$stat_obj{stats}{$type}		= ((%{$_}->{value}{high})<<32)|(abs %{$_}->{value}{low});
+	#foreach (@{%{@{%{$statistics}->{statistics}}[0]}->{statistics}}) {
+	foreach (@{@{$statistics->{statistics}}[0]->{statistics}}) {
+		my $type			= $_->{type};
+		#$stat_obj{stats}{$type}		= ((%{$_}->{value}{high})<<32)|(abs %{$_}->{value}{low});
+		$stat_obj{stats}{$type}		= (($_->{value}{high})<<32)|(abs $_->{value}{low});
 	}
 	
 	return %stat_obj
@@ -566,7 +570,8 @@ sub __process_pool_member_statistics {
 	my %stat_obj;
 
 	foreach (@{$statistics}) {
-		my $node	= %{@{%{$_}->{statistics}}[0]}->{member}->{address}.':'.%{@{%{$_}->{statistics}}[0]}->{member}->{port};
+		#my $node	= %{@{%{$_}->{statistics}}[0]}->{member}->{address}.':'.%{@{%{$_}->{statistics}}[0]}->{member}->{port};
+		my $node	= @{$_->{statistics}}[0]->{member}->{address}.':'.@{$_->{statistics}}[0]->{member}->{port};
 		$stat_obj{$node} = {__process_statistics($_)};
 	}
 	
@@ -684,16 +689,80 @@ of the saved configuration file in the format B<YYYYMMDD>.
 
 =cut
 
-sub save_configuration {
-	my ($self,$filename)	= @_;
+sub __save_configuration {
+	my ($self,$filename,$flag)	= @_;
 
 	if (($filename eq 'today') or ($filename eq '')) {
 		$filename = __get_timestamp();
 	}
+	
+	$flag or $flag = 'SAVE_FULL';
 
-	$self->_request(module => 'System', interface => 'ConfigSync', method => 'save_configuration', data => { filename => $filename, save_flag => 'SAVE_FULL'});
+	$self->_request(module => 'System', interface => 'ConfigSync', method => 'save_configuration', data => { filename => $filename, save_flag => $flag});
 
 	return 1	
+}
+
+sub save_configuration {
+	my ($self,$filename)	= @_;
+	return ($self->__save_configuration($filename,'SAVE_FULL'));
+}
+
+=head3 save_base_configuration ()
+
+	$ic->save_base_configuration();
+
+Saves only the base configuration (VLANs, self IPs...). The filename specified when used with this mode will 
+be ignored, since configuration will be saved to /config/bigip_base.conf by default. 
+
+=cut
+
+sub save_base_configuration {
+	my $self	= shift;
+	return ($self->__save_configuration('ignore','SAVE_BASE_LEVEL_CONFIG'));
+}
+
+=head3 save_high_level_configuration ()
+
+	$ic->save_high_level_configuration();
+
+Saves only the high-level configuration (virtual servers, pools, members, monitors...). The filename specified 
+when used with this mode will be ignored, since configuration will be saved to /config/bigip.conf by default. 
+
+=cut
+
+sub save_high_level_configuration {
+	my $self	= shift;
+	return ($self->__save_configuration('ignore','SAVE_HIGH_LEVEL_CONFIG'));
+}
+
+
+=head3 download_configuration ($filename)
+
+This method downloads a saved UCS configuration from the target device.
+
+=cut
+
+sub download_configuration {
+	my ($self,$config_name,$local_file)	= @_;
+	my $chunk	= 65536;
+	my $offset	= 0;
+	my $data;
+
+	$config_name or croak 'No configuration file specified';
+
+	open my $fh, '+>', $local_file or croak "Unable to open local file: $local_file";
+	binmode($fh);
+
+	while (1) {
+		$data	= $self->_request(module => 'System', interface => 'ConfigSync', method => 'download_configuration', data => {config_name => $config_name, chunk_size => $chunk, file_offset => $offset});
+		print $fh $data->{file_data};
+		last if (($data->{chain_type} eq 'FILE_LAST') or ($data->{chain_type} eq 'FILE_FIRST_AND_LAST'));
+		$offset+=(length($data->{file_data}));		
+	}
+
+	close $fh;
+	return 1
 }
 
 =head3 get_interface_list ()
@@ -706,7 +775,8 @@ Retuns an ordered list of all interfaces on the target device.
 
 sub get_interface_list {
 	my $self	= shift;
-	return sort @{$self->_request(module => 'Networking', interface => 'Interfaces', method => 'get_list')}
+	my @inet	= sort @{$self->_request(module => 'Networking', interface => 'Interfaces', method => 'get_list')};
+	return @inet
 }
 
 =head3 get_interface_statistics ($interface)
@@ -899,7 +969,7 @@ Pool member are returned in the format B<IP_address:service_port>.
 sub get_pool_members {
 	my ($self, $pool)= @_;
 	my @members;
-	foreach (@{@{$self->__get_pool_members($pool)}[0]}) {push @members, (%{$_}->{address}.':'.%{$_}->{port})}
+	foreach (@{@{$self->__get_pool_members($pool)}[0]}) {push @members, ($_->{address}.':'.$_->{port})}
 	return @members;
 }
 
@@ -1091,7 +1161,7 @@ sub get_node_status_as_string {
 	
 	$status_key or ($status_key = 'status_description');
 	
-	return %{(@{$self->get_node_status($node)})[0]}->{$status_key};
+	return @{$self->get_node_status($node)}[0]->{$status_key};
 }
 
 =head3 get_node_monitor_status ($node)
@@ -1145,16 +1215,6 @@ For specific information regarding data and units of measurement for statistics 
 sub get_node_statistics_stringified {
 	my ($self, $node)= @_;
 	return __process_statistics($self->get_node_statistics($node));
-	my $statistics	= $self->_request(module =>'LocalLB', interface => 'NodeAddress', method => 'get_statistics', data => {node_addresses => [$node]});
-	my %stat_obj	= (timestamp => __process_timestamp($statistics->{time_stamp}));
-
-	foreach (@{%{@{%{$statistics}->{statistics}}[0]}->{statistics}}) {
-		my $type			= %{$_}->{type};
-		$stat_obj{stats}{$type}{high}	= %{$_}->{value}{high};
-		$stat_obj{stats}{$type}{low}	= %{$_}->{value}{low};
-	}
-	
-	return %stat_obj
 }
 
 =head3 get_event_subscription
