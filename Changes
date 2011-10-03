@@ -1,4 +1,10 @@
 Revision history for BigIP::iControl
 
 0.01	2011-09-19/17:00:00
-        Initial version. Note that this module was frequently available on CPAN as iControl.
+        Initial version. Note that this module was previously available on CPAN as iControl.
+
+0.02	2011-09-30/15:33:00
+	Functionality and bugfix release.  Compilation is now free of warnings.  Methods for saving UCS archives introduced.
+
+0.03	2011-10-03/16:06:00
+	Added get_configuration_list and delete_configuration_methods.
