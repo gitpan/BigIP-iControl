@@ -7,8 +7,7 @@ use Carp qw(confess croak);
 use Exporter;
 use SOAP::Lite;
 
-our @ISA		= qw(Exporter);
-our $VERSION 		= '0.03';
+our $VERSION    = '0.04';
 
 =head1 NAME
 
@@ -65,293 +64,318 @@ our $urn_map;
 # Our implementation of the iControl API
 # Refer to http://devcentral.f5.com/wiki/iControl.APIReference.ashx for complete detail.
 
-our $modules	= { 
-		ARX		=>	{},
-		ASM		=>	{},
-		Common		=>	{},
-		GlobalLB	=>	{},
-		LTConfig	=>	{},
-		LocalLB		=>	{
-					VirtualServer	=>	{
-								get_list		=> 0,
-								get_default_pool_name	=> 'virtual_servers',
-								get_destination		=> 'virtual_servers',
-								get_enabled_state	=> 'virtual_servers',
-								get_statistics		=> 'virtual_servers',
-								get_all_statistics	=> 0
-								},
-					Pool		=>	{
-								get_list		=> 0,
-								get_member		=> 'pool_names',
-								get_statistics		=> 'pool_names',
-								get_all_statistics	=> 'pool_names'
-								},
-					PoolMember	=>	{
-								get_statistics		=> {pool_names => 1, members => 1},
-								get_all_statistics	=> 'pool_names'
-								},
-					NodeAddress	=>	{
-								get_list		=> 0,
-								get_screen_name		=> 'node_addresses',
-								get_object_status	=> 'node_addresses',
-								get_monitor_status	=> 'node_addresses',
-								get_statistics		=> 'node_addresses'
-								}
-					},
-		Management	=> 	{
-					EventSubscription=>	{
-								create			=> 'sub_detail_list',
-								get_list		=> 0
-								}
-					},
-		Networking	=> 	{
-					Interfaces	=>	{
-								get_list		=> 0,
-								get_statistics		=> 'interfaces'
-								}
-					},
-		System		=> 	{
-					ConfigSync	=>	{
-								save_configuration	=> {filename => 1, save_flag => 1},
-								download_configuration	=> {config_name => 1, chunk_size => 1, file_offset => 1}
-								},
-					SystemInfo	=>	{
-								get_system_information	=> 0
-								},
-					Cluster		=>	{
-								get_cluster_enabled_state=> 'cluster_names',
-								get_list		=> 0
-								},
-					Failover	=>	{
-								get_failover_mode	=> 0,
-								get_failover_state	=> 0,
-								is_redundant		=> 0
-								}
-					},
-		WebAccelerator	=> 	{}
-		};
+our $modules    = {
+	ARX		=>	{},
+	ASM		=>	{},
+	Common		=>	{},
+	GlobalLB	=>	{
+				Pool		=>	{
+							get_description		=> 'pool_names',
+							get_list		=> 0,
+							get_member		=> 'pool_names'
+							},
+				VirtualServer	=>	{
+							get_all_statistics	=> 0,
+							get_enabled_state	=> 'virtual_servers',
+							get_list		=> 0
+							}
+				},
+	LTConfig	=>	{},
+	LocalLB		=>	{
+				VirtualServer	=>	{
+							get_list		=> 0,
+							get_default_pool_name	=> 'virtual_servers',
+							get_destination		=> 'virtual_servers',
+							get_enabled_state	=> 'virtual_servers',
+							get_statistics		=> 'virtual_servers',
+							get_all_statistics	=> 0
+							},
+				Pool		=>	{
+							get_list		=> 0,
+							get_member		=> 'pool_names',
+							get_statistics		=> 'pool_names',
+							get_all_statistics	=> 'pool_names'
+							},
+				PoolMember	=>	{
+							get_statistics		=> {pool_names => 1, members => 1},
+							get_all_statistics	=> 'pool_names'
+							},
+				NodeAddress	=>	{
+							get_list		=> 0,
+							get_screen_name		=> 'node_addresses',
+							get_object_status	=> 'node_addresses',
+							get_monitor_status	=> 'node_addresses',
+							get_statistics		=> 'node_addresses'
+							}
+				},
+	Management	=> 	{
+				EventSubscription=>	{
+							create			=> 'sub_detail_list',
+							get_list		=> 0
+							}
+				},
+	Networking	=> 	{
+				Interfaces	=>	{
+							get_list		=> 0,
+							get_statistics		=> 'interfaces'
+							}
+				},
+	System		=> 	{
+				ConfigSync	=>	{
+							get_configuration_list	=> 0,
+							delete_configuration	=> {filename => 1},
+							save_configuration	=> {filename => 1, save_flag => 1},
+							download_configuration	=> {config_name => 1, chunk_size => 1, file_offset => 1}
+							},
+				SystemInfo	=>	{
+							get_system_information	=> 0,
+							get_system_id		=> 0,
+							get_cpu_metrics		=> 0,
+							get_cpu_usage_extended_information=> 'host_ids'
+							},
+				Cluster		=>	{
+							get_cluster_enabled_state=> 'cluster_names',
+							get_list		=> 0
+							},
+				Failover	=>	{
+							get_failover_mode	=> 0,
+							get_failover_state	=> 0,
+							is_redundant		=> 0
+							},
+				Connections	=>	{
+							get_list		=> 0,
+							get_all_active_connections=>0
+							},
+				Services        =>      {
+							get_list                => 0,
+							get_service_status      => {services => 1},
+							get_all_service_statuses=> 0
+							}
+				},
+	WebAccelerator	=> 	{}
+	};
 
 our $event_types= {
-		EVENTTYPE_NONE			=>	1,
-		EVENTTYPE_TEST			=>	1,
-		EVENTTYPE_ALL			=>	1,
-		EVENTTYPE_SYSTEM_STARTUP	=>	1,
-		EVENTTYPE_SYSTEM_SHUTDOWN	=>	1,
-		EVENTTYPE_SYSTEM_CONFIG_LOAD	=>	1,
-		EVENTTYPE_CREATE		=>	1,
-		EVENTTYPE_MODIFY		=>	1,
-		EVENTTYPE_DELETE		=>	1,
-		EVENTTYPE_ADMIN_IP		=>	1,
-		EVENTTYPE_ARP_ENTRY		=>	1,
-		EVENTTYPE_DAEMON_HA		=>	1,
-		EVENTTYPE_DB_VARIABLE		=>	1,
-		EVENTTYPE_FEATURE_FLAGS		=>	1,
-		EVENTTYPE_FILTER_PROFILE	=>	1,
-		EVENTTYPE_GTMD			=>	1,
-		EVENTTYPE_INTERFACE		=>	1,
-		EVENTTYPE_LCDWARN		=>	1,
-		EVENTTYPE_L2_FORWARD		=>	1,
-		EVENTTYPE_MIRROR_PORT_MEMBER	=>	1,
-		EVENTTYPE_MIRROR_PORT		=>	1,
-		EVENTTYPE_MIRROR_VLAN		=>	1,
-		EVENTTYPE_MONITOR		=>	1,
-		EVENTTYPE_NAT			=>	1,
-		EVENTTYPE_NODE_ADDRESS		=>	1,
-		EVENTTYPE_PACKET_FILTER		=>	1,
-		EVENTTYPE_PCI_DEVICE		=>	1,
-		EVENTTYPE_POOL			=>	1,
-		EVENTTYPE_POOL_MEMBER		=>	1,
-		EVENTTYPE_RATE_FILTER		=>	1,
-		EVENTTYPE_ROUTE_MGMT		=>	1,
-		EVENTTYPE_ROUTE_UPDATE		=>	1,
-		EVENTTYPE_RULE			=>	1,
-		EVENTTYPE_SELF_IP		=>	1,
-		EVENTTYPE_SENSOR		=>	1,
-		EVENTTYPE_SNAT_ADDRESS		=>	1,
-		EVENTTYPE_SNAT_POOL		=>	1,
-		EVENTTYPE_SNAT_POOL_MEMBER	=>	1,
-		EVENTTYPE_STP			=>	1,
-		EVENTTYPE_SWITCH_DOMAIN		=>	1,
-		EVENTTYPE_SWITCH_EDGE		=>	1,
-		EVENTTYPE_TAMD_AUTH		=>	1,
-		EVENTTYPE_TRUNK			=>	1,
-		EVENTTYPE_TRUNK_CONFIG_MEMBER	=>	1,
-		EVENTTYPE_TRUNK_WORKING_MEMBER	=>	1,
-		EVENTTYPE_VALUE_LIST		=>	1,
-		EVENTTYPE_VIRTUAL_ADDRESS	=>	1,
-		EVENTTYPE_VIRTUAL_SERVER	=>	1,
-		EVENTTYPE_VIRTUAL_SERVER_PROFILE=>	1,
-		EVENTTYPE_VLAN			=>	1,
-		EVENTTYPE_VLAN_MEMBER		=>	1,
-		EVENTTYPE_VLANGROUP		=>	1
-		};
+        EVENTTYPE_NONE                  =>      1,
+        EVENTTYPE_TEST                  =>      1,
+        EVENTTYPE_ALL                   =>      1,
+        EVENTTYPE_SYSTEM_STARTUP        =>      1,
+        EVENTTYPE_SYSTEM_SHUTDOWN       =>      1,
+        EVENTTYPE_SYSTEM_CONFIG_LOAD    =>      1,
+        EVENTTYPE_CREATE                =>      1,
+        EVENTTYPE_MODIFY                =>      1,
+        EVENTTYPE_DELETE                =>      1,
+        EVENTTYPE_ADMIN_IP              =>      1,
+        EVENTTYPE_ARP_ENTRY             =>      1,
+        EVENTTYPE_DAEMON_HA             =>      1,
+        EVENTTYPE_DB_VARIABLE           =>      1,
+        EVENTTYPE_FEATURE_FLAGS         =>      1,
+        EVENTTYPE_FILTER_PROFILE        =>      1,
+        EVENTTYPE_GTMD                  =>      1,
+        EVENTTYPE_INTERFACE             =>      1,
+        EVENTTYPE_LCDWARN               =>      1,
+        EVENTTYPE_L2_FORWARD            =>      1,
+        EVENTTYPE_MIRROR_PORT_MEMBER    =>      1,
+        EVENTTYPE_MIRROR_PORT           =>      1,
+        EVENTTYPE_MIRROR_VLAN           =>      1,
+        EVENTTYPE_MONITOR               =>      1,
+        EVENTTYPE_NAT                   =>      1,
+        EVENTTYPE_NODE_ADDRESS          =>      1,
+        EVENTTYPE_PACKET_FILTER         =>      1,
+        EVENTTYPE_PCI_DEVICE            =>      1,
+        EVENTTYPE_POOL                  =>      1,
+        EVENTTYPE_POOL_MEMBER           =>      1,
+        EVENTTYPE_RATE_FILTER           =>      1,
+        EVENTTYPE_ROUTE_MGMT            =>      1,
+        EVENTTYPE_ROUTE_UPDATE          =>      1,
+        EVENTTYPE_RULE                  =>      1,
+        EVENTTYPE_SELF_IP               =>      1,
+        EVENTTYPE_SENSOR                =>      1,
+        EVENTTYPE_SNAT_ADDRESS          =>      1,
+        EVENTTYPE_SNAT_POOL             =>      1,
+        EVENTTYPE_SNAT_POOL_MEMBER      =>      1,
+        EVENTTYPE_STP                   =>      1,
+        EVENTTYPE_SWITCH_DOMAIN         =>      1,
+        EVENTTYPE_SWITCH_EDGE           =>      1,
+        EVENTTYPE_TAMD_AUTH             =>      1,
+        EVENTTYPE_TRUNK                 =>      1,
+        EVENTTYPE_TRUNK_CONFIG_MEMBER   =>      1,
+        EVENTTYPE_TRUNK_WORKING_MEMBER  =>      1,
+        EVENTTYPE_VALUE_LIST            =>      1,
+        EVENTTYPE_VIRTUAL_ADDRESS       =>      1,
+        EVENTTYPE_VIRTUAL_SERVER        =>      1,
+        EVENTTYPE_VIRTUAL_SERVER_PROFILE=>      1,
+        EVENTTYPE_VLAN                  =>      1,
+        EVENTTYPE_VLAN_MEMBER           =>      1,
+        EVENTTYPE_VLANGROUP             =>      1
+};
 
 
 sub BEGIN {
 
 	$urn_map= {
-		"{urn:iControl}ASM.ApplyLearningType"					=> 1,
-		"{urn:iControl}ASM.DynamicSessionsInUrlType" 				=> 1,
-		"{urn:iControl}ASM.FlagState" 						=> 1,
-		"{urn:iControl}ASM.PolicyTemplate" 					=> 1,
-		"{urn:iControl}ASM.ProtocolType" 					=> 1,
-		"{urn:iControl}ASM.SeverityName" 					=> 1,
-		"{urn:iControl}ASM.ViolationName" 					=> 1,
-		"{urn:iControl}ASM.WebApplicationLanguage" 				=> 1,
-		"{urn:iControl}Common.ArmedState" 					=> 1,
-		"{urn:iControl}Common.AuthenticationMethod" 				=> 1,
-		"{urn:iControl}Common.AvailabilityStatus" 				=> 1,
-		"{urn:iControl}Common.DaemonStatus" 					=> 1,
-		"{urn:iControl}Common.EnabledState" 					=> 1,
-		"{urn:iControl}Common.EnabledStatus" 					=> 1,
-		"{urn:iControl}Common.FileChainType" 					=> 1,
-		"{urn:iControl}Common.HAAction" 					=> 1,
-		"{urn:iControl}Common.HAState" 						=> 1,
-		"{urn:iControl}Common.IPHostType" 					=> 1,
-		"{urn:iControl}Common.ProtocolType" 					=> 1,
-		"{urn:iControl}Common.SourcePortBehavior" 				=> 1,
-		"{urn:iControl}Common.StatisticType" 					=> 1,
-		"{urn:iControl}Common.TMOSModule" 					=> 1,
-		"{urn:iControl}GlobalLB.AddressType" 					=> 1,
-		"{urn:iControl}GlobalLB.AutoConfigurationState" 			=> 1,
-		"{urn:iControl}GlobalLB.AvailabilityDependency" 			=> 1,
-		"{urn:iControl}GlobalLB.LBMethod" 					=> 1,
-		"{urn:iControl}GlobalLB.LDNSProbeProtocol" 				=> 1,
-		"{urn:iControl}GlobalLB.LinkWeightType" 				=> 1,
-		"{urn:iControl}GlobalLB.MetricLimitType" 				=> 1,
-		"{urn:iControl}GlobalLB.MonitorAssociationRemovalRule" 			=> 1,
-		"{urn:iControl}GlobalLB.MonitorInstanceStateType" 			=> 1,
-		"{urn:iControl}GlobalLB.MonitorRuleType" 				=> 1,
-		"{urn:iControl}GlobalLB.RegionDBType" 					=> 1,
-		"{urn:iControl}GlobalLB.RegionType" 					=> 1,
-		"{urn:iControl}GlobalLB.ServerType" 					=> 1,
-		"{urn:iControl}GlobalLB.Application.ApplicationObjectType" 		=> 1,
-		"{urn:iControl}GlobalLB.DNSSECKey.KeyAlgorithm" 			=> 1,
-		"{urn:iControl}GlobalLB.DNSSECKey.KeyType" 				=> 1,
-		"{urn:iControl}GlobalLB.Monitor.IntPropertyType" 			=> 1,
-		"{urn:iControl}GlobalLB.Monitor.StrPropertyType" 			=> 1,
-		"{urn:iControl}GlobalLB.Monitor.TemplateType" 				=> 1,
-		"{urn:iControl}LocalLB.AddressType" 					=> 1,
-		"{urn:iControl}LocalLB.AuthenticationMethod" 				=> 1,
-		"{urn:iControl}LocalLB.AvailabilityStatus" 				=> 1,
-		"{urn:iControl}LocalLB.ClientSSLCertificateMode" 			=> 1,
-		"{urn:iControl}LocalLB.ClonePoolType" 					=> 1,
-		"{urn:iControl}LocalLB.CompressionMethod" 				=> 1,
-		"{urn:iControl}LocalLB.CookiePersistenceMethod" 			=> 1,
-		"{urn:iControl}LocalLB.CredentialSource" 				=> 1,
-		"{urn:iControl}LocalLB.EnabledStatus" 					=> 1,
-		"{urn:iControl}LocalLB.HardwareAccelerationMode" 			=> 1,
-		"{urn:iControl}LocalLB.HttpChunkMode" 					=> 1,
-		"{urn:iControl}LocalLB.HttpCompressionMode" 				=> 1,
-		"{urn:iControl}LocalLB.HttpRedirectRewriteMode" 			=> 1,
-		"{urn:iControl}LocalLB.LBMethod" 					=> 1,
-		"{urn:iControl}LocalLB.MonitorAssociationRemovalRule" 			=> 1,
-		"{urn:iControl}LocalLB.MonitorInstanceStateType" 			=> 1,
-		"{urn:iControl}LocalLB.MonitorRuleType" 				=> 1,
-		"{urn:iControl}LocalLB.MonitorStatus"					=> 1,
-		"{urn:iControl}LocalLB.PersistenceMode" 				=> 1,
-		"{urn:iControl}LocalLB.ProfileContextType" 				=> 1,
-		"{urn:iControl}LocalLB.ProfileMode" 					=> 1,
-		"{urn:iControl}LocalLB.ProfileType" 					=> 1,
-		"{urn:iControl}LocalLB.RamCacheCacheControlMode" 			=> 1,
-		"{urn:iControl}LocalLB.RtspProxyType" 					=> 1,
-		"{urn:iControl}LocalLB.SSLOption" 					=> 1,
-		"{urn:iControl}LocalLB.ServerSSLCertificateMode" 			=> 1,
-		"{urn:iControl}LocalLB.ServiceDownAction" 				=> 1,
-		"{urn:iControl}LocalLB.SessionStatus" 					=> 1,
-		"{urn:iControl}LocalLB.SnatType" 					=> 1,
-		"{urn:iControl}LocalLB.TCPCongestionControlMode" 			=> 1,
-		"{urn:iControl}LocalLB.TCPOptionMode" 					=> 1,
-		"{urn:iControl}LocalLB.UncleanShutdownMode" 				=> 1,
-		"{urn:iControl}LocalLB.VirtualAddressStatusDependency" 			=> 1,
-		"{urn:iControl}LocalLB.Class.ClassType" 				=> 1,
-		"{urn:iControl}LocalLB.Class.FileFormatType" 				=> 1,
-		"{urn:iControl}LocalLB.Class.FileModeType" 				=> 1,
-		"{urn:iControl}LocalLB.Monitor.IntPropertyType" 			=> 1,
-		"{urn:iControl}LocalLB.Monitor.StrPropertyType" 			=> 1,
-		"{urn:iControl}LocalLB.Monitor.TemplateType" 				=> 1,
-		"{urn:iControl}LocalLB.ProfilePersistence.PersistenceHashMethod"	=> 1,
-		"{urn:iControl}LocalLB.ProfileUserStatistic.UserStatisticKey" 		=> 1,
-		"{urn:iControl}LocalLB.RAMCacheInformation.RAMCacheVaryType"		=> 1,
-		"{urn:iControl}LocalLB.RateClass.DirectionType" 			=> 1,
-		"{urn:iControl}LocalLB.RateClass.DropPolicyType" 			=> 1,
-		"{urn:iControl}LocalLB.RateClass.QueueType" 				=> 1,
-		"{urn:iControl}LocalLB.RateClass.UnitType" 				=> 1,
-		"{urn:iControl}LocalLB.VirtualServer.VirtualServerCMPEnableMode"	=> 1,
-		"{urn:iControl}LocalLB.VirtualServer.VirtualServerType" 		=> 1,
-		"{urn:iControl}Management.DebugLevel" 					=> 1,
-		"{urn:iControl}Management.LDAPPasswordEncodingOption" 			=> 1,
-		"{urn:iControl}Management.LDAPSSLOption" 				=> 1,
-		"{urn:iControl}Management.LDAPSearchMethod" 				=> 1,
-		"{urn:iControl}Management.LDAPSearchScope" 				=> 1,
-		"{urn:iControl}Management.OCSPDigestMethod" 				=> 1,
-		"{urn:iControl}Management.ZoneType" 					=> 1,
-		"{urn:iControl}Management.EventNotification.EventDataType" 		=> 1,
-		"{urn:iControl}Management.EventSubscription.AuthenticationMode" 	=> 1,
-		"{urn:iControl}Management.EventSubscription.EventType" 			=> 1,
-		"{urn:iControl}Management.EventSubscription.ObjectType" 		=> 1,
-		"{urn:iControl}Management.EventSubscription.SubscriptionStatusCode" 	=> 1,
-		"{urn:iControl}Management.KeyCertificate.CertificateType" 		=> 1,
-		"{urn:iControl}Management.KeyCertificate.KeyType" 			=> 1,
-		"{urn:iControl}Management.KeyCertificate.ManagementModeType" 		=> 1,
-		"{urn:iControl}Management.KeyCertificate.SecurityType" 			=> 1,
-		"{urn:iControl}Management.KeyCertificate.ValidityType" 			=> 1,
-		"{urn:iControl}Management.Provision.ProvisionLevel" 			=> 1,
-		"{urn:iControl}Management.SNMPConfiguration.AuthType" 			=> 1,
-		"{urn:iControl}Management.SNMPConfiguration.DiskCheckType" 		=> 1,
-		"{urn:iControl}Management.SNMPConfiguration.LevelType" 			=> 1,
-		"{urn:iControl}Management.SNMPConfiguration.ModelType" 			=> 1,
-		"{urn:iControl}Management.SNMPConfiguration.PrefixType" 		=> 1,
-		"{urn:iControl}Management.SNMPConfiguration.PrivacyProtocolType"	=> 1,
-		"{urn:iControl}Management.SNMPConfiguration.SinkType" 			=> 1,
-		"{urn:iControl}Management.SNMPConfiguration.TransportType" 		=> 1,
-		"{urn:iControl}Management.SNMPConfiguration.ViewType" 			=> 1,
-		"{urn:iControl}Management.UserManagement.UserRole" 			=> 1,
-		"{urn:iControl}Networking.FilterAction" 				=> 1,
-		"{urn:iControl}Networking.FlowControlType" 				=> 1,
-		"{urn:iControl}Networking.LearningMode" 				=> 1,
-		"{urn:iControl}Networking.MediaStatus" 					=> 1,
-		"{urn:iControl}Networking.MemberTagType" 				=> 1,
-		"{urn:iControl}Networking.MemberType" 					=> 1,
-		"{urn:iControl}Networking.PhyMasterSlaveMode" 				=> 1,
-		"{urn:iControl}Networking.RouteEntryType" 				=> 1,
-		"{urn:iControl}Networking.STPLinkType" 					=> 1,
-		"{urn:iControl}Networking.STPModeType" 					=> 1,
-		"{urn:iControl}Networking.STPRoleType" 					=> 1,
-		"{urn:iControl}Networking.STPStateType" 				=> 1,
-		"{urn:iControl}Networking.ARP.NDPState" 				=> 1,
-		"{urn:iControl}Networking.Interfaces.MediaType" 			=> 1,
-		"{urn:iControl}Networking.ProfileWCCPGRE.WCCPGREForwarding" 		=> 1,
-		"{urn:iControl}Networking.STPInstance.PathCostType" 			=> 1,
-		"{urn:iControl}Networking.SelfIPPortLockdown.AllowMode" 		=> 1,
-		"{urn:iControl}Networking.Trunk.DistributionHashOption" 		=> 1,
-		"{urn:iControl}Networking.Trunk.LACPTimeoutOption" 			=> 1,
-		"{urn:iControl}Networking.Trunk.LinkSelectionPolicy" 			=> 1,
-		"{urn:iControl}Networking.Tunnel.TunnelDirection" 			=> 1,
-		"{urn:iControl}Networking.VLANGroup.VLANGroupTransparency" 		=> 1,
-		"{urn:iControl}Networking.iSessionLocalInterface.NatSourceAddress" 	=> 1,
-		"{urn:iControl}Networking.iSessionPeerDiscovery.DiscoveryMode" 		=> 1,
-		"{urn:iControl}Networking.iSessionPeerDiscovery.FilterMode" 		=> 1,
-		"{urn:iControl}Networking.iSessionRemoteInterface.NatSourceAddress" 	=> 1,
-		"{urn:iControl}Networking.iSessionRemoteInterface.OriginState" 		=> 1,
-		"{urn:iControl}System.CPUMetricType" 					=> 1,
-		"{urn:iControl}System.FanMetricType" 					=> 1,
-		"{urn:iControl}System.HardwareType" 					=> 1,
-		"{urn:iControl}System.PSMetricType" 					=> 1,
-		"{urn:iControl}System.TemperatureMetricType" 				=> 1,
-		"{urn:iControl}System.ConfigSync.ConfigExcludeComponent" 		=> 1,
-		"{urn:iControl}System.ConfigSync.ConfigIncludeComponent" 		=> 1,
-		"{urn:iControl}System.ConfigSync.LoadMode" 				=> 1,
-		"{urn:iControl}System.ConfigSync.SaveMode" 				=> 1,
-		"{urn:iControl}System.ConfigSync.SyncMode" 				=> 1,
-		"{urn:iControl}System.Disk.RAIDStatus" 					=> 1,
-		"{urn:iControl}System.Failover.FailoverMode" 				=> 1,
-		"{urn:iControl}System.Failover.FailoverState" 				=> 1,
-		"{urn:iControl}System.Services.ServiceAction" 				=> 1,
-		"{urn:iControl}System.Services.ServiceStatusType" 			=> 1,
-		"{urn:iControl}System.Services.ServiceType" 				=> 1,
-		"{urn:iControl}System.Statistics.GtmIQueryState" 			=> 1,
-		"{urn:iControl}System.Statistics.GtmPathStatisticObjectType" 		=> 1,
+                '{urn:iControl}ASM.ApplyLearningType'					=> 1,
+                '{urn:iControl}ASM.DynamicSessionsInUrlType' 				=> 1,
+                '{urn:iControl}ASM.FlagState' 						=> 1,
+                '{urn:iControl}ASM.PolicyTemplate' 					=> 1,
+                '{urn:iControl}ASM.ProtocolType' 					=> 1,
+                '{urn:iControl}ASM.SeverityName' 					=> 1,
+                '{urn:iControl}ASM.ViolationName' 					=> 1,
+                '{urn:iControl}ASM.WebApplicationLanguage' 				=> 1,
+                '{urn:iControl}Common.ArmedState' 					=> 1,
+                '{urn:iControl}Common.AuthenticationMethod' 				=> 1,
+                '{urn:iControl}Common.AvailabilityStatus' 				=> 1,
+                '{urn:iControl}Common.DaemonStatus' 					=> 1,
+                '{urn:iControl}Common.EnabledState' 					=> 1,
+                '{urn:iControl}Common.EnabledStatus' 					=> 1,
+                '{urn:iControl}Common.FileChainType' 					=> 1,
+                '{urn:iControl}Common.HAAction' 					=> 1,
+                '{urn:iControl}Common.HAState' 						=> 1,
+                '{urn:iControl}Common.IPHostType' 					=> 1,
+                '{urn:iControl}Common.ProtocolType' 					=> 1,
+                '{urn:iControl}Common.SourcePortBehavior' 				=> 1,
+                '{urn:iControl}Common.StatisticType' 					=> 1,
+                '{urn:iControl}Common.TMOSModule' 					=> 1,
+                '{urn:iControl}GlobalLB.AddressType' 					=> 1,
+                '{urn:iControl}GlobalLB.AutoConfigurationState' 			=> 1,
+                '{urn:iControl}GlobalLB.AvailabilityDependency' 			=> 1,
+                '{urn:iControl}GlobalLB.LBMethod' 					=> 1,
+                '{urn:iControl}GlobalLB.LDNSProbeProtocol' 				=> 1,
+                '{urn:iControl}GlobalLB.LinkWeightType' 				=> 1,
+                '{urn:iControl}GlobalLB.MetricLimitType' 				=> 1,
+                '{urn:iControl}GlobalLB.MonitorAssociationRemovalRule' 			=> 1,
+                '{urn:iControl}GlobalLB.MonitorInstanceStateType' 			=> 1,
+                '{urn:iControl}GlobalLB.MonitorRuleType' 				=> 1,
+                '{urn:iControl}GlobalLB.RegionDBType' 					=> 1,
+                '{urn:iControl}GlobalLB.RegionType' 					=> 1,
+                '{urn:iControl}GlobalLB.ServerType' 					=> 1,
+                '{urn:iControl}GlobalLB.Application.ApplicationObjectType' 		=> 1,
+                '{urn:iControl}GlobalLB.DNSSECKey.KeyAlgorithm' 			=> 1,
+                '{urn:iControl}GlobalLB.DNSSECKey.KeyType' 				=> 1,
+                '{urn:iControl}GlobalLB.Monitor.IntPropertyType' 			=> 1,
+                '{urn:iControl}GlobalLB.Monitor.StrPropertyType' 			=> 1,
+                '{urn:iControl}GlobalLB.Monitor.TemplateType' 				=> 1,
+                '{urn:iControl}LocalLB.AddressType' 					=> 1,
+                '{urn:iControl}LocalLB.AuthenticationMethod' 				=> 1,
+                '{urn:iControl}LocalLB.AvailabilityStatus' 				=> 1,
+                '{urn:iControl}LocalLB.ClientSSLCertificateMode' 			=> 1,
+                '{urn:iControl}LocalLB.ClonePoolType' 					=> 1,
+                '{urn:iControl}LocalLB.CompressionMethod' 				=> 1,
+                '{urn:iControl}LocalLB.CookiePersistenceMethod' 			=> 1,
+                '{urn:iControl}LocalLB.CredentialSource' 				=> 1,
+                '{urn:iControl}LocalLB.EnabledStatus' 					=> 1,
+                '{urn:iControl}LocalLB.HardwareAccelerationMode' 			=> 1,
+                '{urn:iControl}LocalLB.HttpChunkMode' 					=> 1,
+                '{urn:iControl}LocalLB.HttpCompressionMode' 				=> 1,
+                '{urn:iControl}LocalLB.HttpRedirectRewriteMode' 			=> 1,
+                '{urn:iControl}LocalLB.LBMethod' 					=> 1,
+                '{urn:iControl}LocalLB.MonitorAssociationRemovalRule' 			=> 1,
+                '{urn:iControl}LocalLB.MonitorInstanceStateType' 			=> 1,
+                '{urn:iControl}LocalLB.MonitorRuleType' 				=> 1,
+                '{urn:iControl}LocalLB.MonitorStatus'					=> 1,
+                '{urn:iControl}LocalLB.PersistenceMode' 				=> 1,
+                '{urn:iControl}LocalLB.ProfileContextType' 				=> 1,
+                '{urn:iControl}LocalLB.ProfileMode' 					=> 1,
+                '{urn:iControl}LocalLB.ProfileType' 					=> 1,
+                '{urn:iControl}LocalLB.RamCacheCacheControlMode' 			=> 1,
+                '{urn:iControl}LocalLB.RtspProxyType' 					=> 1,
+                '{urn:iControl}LocalLB.SSLOption' 					=> 1,
+                '{urn:iControl}LocalLB.ServerSSLCertificateMode' 			=> 1,
+                '{urn:iControl}LocalLB.ServiceDownAction' 				=> 1,
+                '{urn:iControl}LocalLB.SessionStatus' 					=> 1,
+                '{urn:iControl}LocalLB.SnatType' 					=> 1,
+                '{urn:iControl}LocalLB.TCPCongestionControlMode' 			=> 1,
+                '{urn:iControl}LocalLB.TCPOptionMode' 					=> 1,
+                '{urn:iControl}LocalLB.UncleanShutdownMode' 				=> 1,
+                '{urn:iControl}LocalLB.VirtualAddressStatusDependency' 			=> 1,
+                '{urn:iControl}LocalLB.Class.ClassType' 				=> 1,
+                '{urn:iControl}LocalLB.Class.FileFormatType' 				=> 1,
+                '{urn:iControl}LocalLB.Class.FileModeType' 				=> 1,
+                '{urn:iControl}LocalLB.Monitor.IntPropertyType' 			=> 1,
+                '{urn:iControl}LocalLB.Monitor.StrPropertyType' 			=> 1,
+                '{urn:iControl}LocalLB.Monitor.TemplateType' 				=> 1,
+                '{urn:iControl}LocalLB.ProfilePersistence.PersistenceHashMethod'	=> 1,
+                '{urn:iControl}LocalLB.ProfileUserStatistic.UserStatisticKey' 		=> 1,
+                '{urn:iControl}LocalLB.RAMCacheInformation.RAMCacheVaryType'		=> 1,
+                '{urn:iControl}LocalLB.RateClass.DirectionType' 			=> 1,
+                '{urn:iControl}LocalLB.RateClass.DropPolicyType' 			=> 1,
+                '{urn:iControl}LocalLB.RateClass.QueueType' 				=> 1,
+                '{urn:iControl}LocalLB.RateClass.UnitType' 				=> 1,
+                '{urn:iControl}LocalLB.VirtualServer.VirtualServerCMPEnableMode'	=> 1,
+                '{urn:iControl}LocalLB.VirtualServer.VirtualServerType' 		=> 1,
+                '{urn:iControl}Management.DebugLevel' 					=> 1,
+                '{urn:iControl}Management.LDAPPasswordEncodingOption' 			=> 1,
+                '{urn:iControl}Management.LDAPSSLOption' 				=> 1,
+                '{urn:iControl}Management.LDAPSearchMethod' 				=> 1,
+                '{urn:iControl}Management.LDAPSearchScope' 				=> 1,
+                '{urn:iControl}Management.OCSPDigestMethod' 				=> 1,
+                '{urn:iControl}Management.ZoneType' 					=> 1,
+                '{urn:iControl}Management.EventNotification.EventDataType' 		=> 1,
+                '{urn:iControl}Management.EventSubscription.AuthenticationMode' 	=> 1,
+                '{urn:iControl}Management.EventSubscription.EventType' 			=> 1,
+                '{urn:iControl}Management.EventSubscription.ObjectType' 		=> 1,
+                '{urn:iControl}Management.EventSubscription.SubscriptionStatusCode' 	=> 1,
+                '{urn:iControl}Management.KeyCertificate.CertificateType' 		=> 1,
+                '{urn:iControl}Management.KeyCertificate.KeyType' 			=> 1,
+                '{urn:iControl}Management.KeyCertificate.ManagementModeType' 		=> 1,
+                '{urn:iControl}Management.KeyCertificate.SecurityType' 			=> 1,
+                '{urn:iControl}Management.KeyCertificate.ValidityType' 			=> 1,
+                '{urn:iControl}Management.Provision.ProvisionLevel' 			=> 1,
+                '{urn:iControl}Management.SNMPConfiguration.AuthType' 			=> 1,
+                '{urn:iControl}Management.SNMPConfiguration.DiskCheckType' 		=> 1,
+                '{urn:iControl}Management.SNMPConfiguration.LevelType' 			=> 1,
+                '{urn:iControl}Management.SNMPConfiguration.ModelType' 			=> 1,
+                '{urn:iControl}Management.SNMPConfiguration.PrefixType' 		=> 1,
+                '{urn:iControl}Management.SNMPConfiguration.PrivacyProtocolType'	=> 1,
+                '{urn:iControl}Management.SNMPConfiguration.SinkType' 			=> 1,
+                '{urn:iControl}Management.SNMPConfiguration.TransportType' 		=> 1,
+                '{urn:iControl}Management.SNMPConfiguration.ViewType' 			=> 1,
+                '{urn:iControl}Management.UserManagement.UserRole' 			=> 1,
+                '{urn:iControl}Networking.FilterAction' 				=> 1,
+                '{urn:iControl}Networking.FlowControlType' 				=> 1,
+                '{urn:iControl}Networking.LearningMode' 				=> 1,
+                '{urn:iControl}Networking.MediaStatus' 					=> 1,
+                '{urn:iControl}Networking.MemberTagType' 				=> 1,
+                '{urn:iControl}Networking.MemberType' 					=> 1,
+                '{urn:iControl}Networking.PhyMasterSlaveMode' 				=> 1,
+                '{urn:iControl}Networking.RouteEntryType' 				=> 1,
+                '{urn:iControl}Networking.STPLinkType' 					=> 1,
+                '{urn:iControl}Networking.STPModeType' 					=> 1,
+                '{urn:iControl}Networking.STPRoleType' 					=> 1,
+                '{urn:iControl}Networking.STPStateType' 				=> 1,
+                '{urn:iControl}Networking.ARP.NDPState' 				=> 1,
+                '{urn:iControl}Networking.Interfaces.MediaType' 			=> 1,
+                '{urn:iControl}Networking.ProfileWCCPGRE.WCCPGREForwarding' 		=> 1,
+                '{urn:iControl}Networking.STPInstance.PathCostType' 			=> 1,
+                '{urn:iControl}Networking.SelfIPPortLockdown.AllowMode' 		=> 1,
+                '{urn:iControl}Networking.Trunk.DistributionHashOption' 		=> 1,
+                '{urn:iControl}Networking.Trunk.LACPTimeoutOption' 			=> 1,
+                '{urn:iControl}Networking.Trunk.LinkSelectionPolicy' 			=> 1,
+                '{urn:iControl}Networking.Tunnel.TunnelDirection' 			=> 1,
+                '{urn:iControl}Networking.VLANGroup.VLANGroupTransparency' 		=> 1,
+                '{urn:iControl}Networking.iSessionLocalInterface.NatSourceAddress' 	=> 1,
+                '{urn:iControl}Networking.iSessionPeerDiscovery.DiscoveryMode' 		=> 1,
+                '{urn:iControl}Networking.iSessionPeerDiscovery.FilterMode' 		=> 1,
+                '{urn:iControl}Networking.iSessionRemoteInterface.NatSourceAddress' 	=> 1,
+                '{urn:iControl}Networking.iSessionRemoteInterface.OriginState' 		=> 1,
+                '{urn:iControl}System.CPUMetricType' 					=> 1,
+                '{urn:iControl}System.FanMetricType' 					=> 1,
+                '{urn:iControl}System.HardwareType' 					=> 1,
+                '{urn:iControl}System.PSMetricType' 					=> 1,
+                '{urn:iControl}System.TemperatureMetricType' 				=> 1,
+                '{urn:iControl}System.ConfigSync.ConfigExcludeComponent' 		=> 1,
+                '{urn:iControl}System.ConfigSync.ConfigIncludeComponent' 		=> 1,
+                '{urn:iControl}System.ConfigSync.LoadMode' 				=> 1,
+                '{urn:iControl}System.ConfigSync.SaveMode' 				=> 1,
+                '{urn:iControl}System.ConfigSync.SyncMode' 				=> 1,
+                '{urn:iControl}System.Disk.RAIDStatus' 					=> 1,
+                '{urn:iControl}System.Failover.FailoverMode' 				=> 1,
+                '{urn:iControl}System.Failover.FailoverState' 				=> 1,
+                '{urn:iControl}System.Services.ServiceAction' 				=> 1,
+                '{urn:iControl}System.Services.ServiceStatusType' 			=> 1,
+                '{urn:iControl}System.Services.ServiceType' 				=> 1,
+                '{urn:iControl}System.Statistics.GtmIQueryState' 			=> 1,
+                '{urn:iControl}System.Statistics.GtmPathStatisticObjectType' 		=> 1,
 	};
 
 	package BigIP::iControlDeserializer;
@@ -411,14 +435,13 @@ The protocol with to use for communications with the iControl API (should be eit
 
 sub new {
 	my ($class, %args) 	= @_;
-	@_ == 11		or croak 'Not enough arguments for constructor';
-	my $self 		= bless({}, $class);
-	defined $args{server}	? $self->{server} 	= $args{server}		: croak 'Constructor failed: server not defined';
+        @_ == 11		or croak 'Not enough arguments for constructor';
+	my $self 		= bless {}, $class;
+        defined $args{server}	? $self->{server} 	= $args{server}		: croak 'Constructor failed: server not defined';
 	defined $args{username}	? $self->{username} 	= $args{username}	: croak 'Constructor failed: username not defined';
 	defined $args{password}	? $self->{password} 	= $args{password}	: croak 'Constructor failed: password not defined';
 	defined $args{port}	? $self->{port} 	= $args{port}		: croak 'Constructor failed: port not defined';
 	defined $args{proto}	? $self->{proto} 	= $args{proto}		: croak 'Constructor failed: proto not defined';
-	#sub SOAP::Transport::HTTP::Client::get_basic_credentials {return $self->{username} => $self->{password}}
 	$self->{_client}	= SOAP::Lite	->proxy($self->{proto}.'://'.$self->{username}.':'.$self->{password}.'@'.$self->{server}.':'.$self->{port}.'/iControl/iControlPortal.cgi')
 						->deserializer(BigIP::iControlDeserializer->new());
 	return $self;
@@ -431,14 +454,11 @@ sub _set_uri {
 }
 
 sub _unset_uri {
-	my $self	= shift;
-	undef $self->{_client}->{uri};
-	return 1
+        undef $_[0]->{_client}->{uri};
 }
 
 sub _get_username {
-	my $self	= shift;
-	return $self->{username};
+	return $_[0]->{username};
 }
 
 # We do most of our request validation in this method so it is unnessecarily complex, not entirely intuitive, uglier
@@ -493,37 +513,40 @@ sub _get_username {
 
 sub _request {
 	my ($self, %args)= @_;
-	$args{module}	and exists $modules->{$args{module}}					or return 'Request error: unknown module name: "'.$args{module}.'"';
-	$args{interface}and exists $modules->{$args{module}}->{$args{interface}}		or return "Request error: unknown interface name for module $args{module}: \"$args{interface}\"";
-	$args{method}	and exists $modules->{$args{module}}->{$args{interface}}->{$args{method}}or return "Request error: unknown method name for module $args{module} and interface $args{interface}: \"$args{method}\"";
+	$args{module}   and exists $modules->{$args{module}} 
+                        or return 'Request error: unknown module name: "'.$args{module}.'"';
+	$args{interface}and exists $modules->{$args{module}}->{$args{interface}}
+                        or return "Request error: unknown interface name for module $args{module}: \"$args{interface}\"";
+        $args{method}   and exists $modules->{$args{module}}->{$args{interface}}->{$args{method}} 
+                        or return "Request error: unknown method name for module $args{module} and interface $args{interface}: \"$args{method}\"";
 
-	my @params = ();
+        my @params = ();
 
-	if ($modules->{$args{module}}->{$args{interface}}->{$args{method}}) {
+        if ($modules->{$args{module}}->{$args{interface}}->{$args{method}}) {
 
-		foreach my $arg (keys %{$args{data}}) {
+                foreach my $arg (keys %{$args{data}}) {
 
-			if (ref $modules->{$args{module}}->{$args{interface}}->{$args{method}} eq 'HASH') {
-				exists $modules->{$args{module}}->{$args{interface}}->{$args{method}}->{$arg}
-												or croak "Request error: method $args{method} for interface $args{interface} in module $args{module} requires " .
-										  		"mandatory data parameter \"$modules->{$args{module}}->{$args{interface}}->{$args{method}}->{$arg}\"";
-				push @params, SOAP::Data->name($arg => $args{data}{$arg});
-			}
-			else {
-				$arg eq $modules->{$args{module}}->{$args{interface}}->{$args{method}}
-												or croak "Request error: method $args{method} for interface $args{interface} in module $args{module} requires " .
-												  "mandatory data parameter \"$modules->{$args{module}}->{$args{interface}}->{$args{method}}\"";
-				push @params, SOAP::Data->name(%{$args{data}});
-			}
-		}
+                        if (ref $modules->{$args{module}}->{$args{interface}}->{$args{method}} eq 'HASH') {
+                                exists $modules->{$args{module}}->{$args{interface}}->{$args{method}}->{$arg}
+                                        or croak "Request error: method $args{method} for interface $args{interface} in module $args{module} requires " .
+                                                 "mandatory data parameter \"$modules->{$args{module}}->{$args{interface}}->{$args{method}}->{$arg}\"";
+                                        push @params, SOAP::Data->name($arg => $args{data}{$arg});
+                        }
+                        else {
+                                $arg eq $modules->{$args{module}}->{$args{interface}}->{$args{method}}
+                                        or croak "Request error: method $args{method} for interface $args{interface} in module $args{module} requires " .
+                                                 "mandatory data parameter \"$modules->{$args{module}}->{$args{interface}}->{$args{method}}\"";
+                                push @params, SOAP::Data->name(%{$args{data}});
+                        }
+                }
 	}
 
-	$self->_set_uri($args{module}, $args{interface});
-	my $method	= $args{method};
-	my $query	= $self->{_client}->$method(@params);
-	$query->fault	and confess('SOAP call failed: ', $query->faultstring());
-	$self->_unset_uri();
-	return $query->result;
+        $self->_set_uri($args{module}, $args{interface});
+        my $method      = $args{method};
+        my $query       = $self->{_client}->$method(@params);
+        $query->fault and confess('SOAP call failed: ', $query->faultstring());
+        $self->_unset_uri();
+        return $query->result;
 }
 
 sub __get_timestamp {
@@ -542,11 +565,11 @@ sub __get_timestamp {
 
 sub __process_timestamp {
 	my $time_stamp	= shift;
-	return (__zero_fill($time_stamp->{year}) . '-' .
-		__zero_fill($time_stamp->{month}) . '-' .
-		__zero_fill($time_stamp->{day}) . '-' .
-		__zero_fill($time_stamp->{hour}) . '-' .
-		__zero_fill($time_stamp->{minute}) . '-' .
+	return (__zero_fill($time_stamp->{year})	. '-' .
+		__zero_fill($time_stamp->{month})	. '-' .
+		__zero_fill($time_stamp->{day})		. '-' .
+		__zero_fill($time_stamp->{hour})	. '-' .
+		__zero_fill($time_stamp->{minute})	. '-' .
 		__zero_fill($time_stamp->{second}))
 }
 
@@ -555,11 +578,9 @@ sub __process_statistics {
 
 	my %stat_obj	= (timestamp => __process_timestamp($statistics->{time_stamp}));
 
-	#foreach (@{%{@{%{$statistics}->{statistics}}[0]}->{statistics}}) {
 	foreach (@{@{$statistics->{statistics}}[0]->{statistics}}) {
-		my $type			= $_->{type};
-		#$stat_obj{stats}{$type}		= ((%{$_}->{value}{high})<<32)|(abs %{$_}->{value}{low});
-		$stat_obj{stats}{$type}		= (($_->{value}{high})<<32)|(abs $_->{value}{low});
+		my $type		= $_->{type};
+		$stat_obj{stats}{$type}	= (($_->{value}{high})<<32)|(abs $_->{value}{low});
 	}
 	
 	return %stat_obj
@@ -570,7 +591,6 @@ sub __process_pool_member_statistics {
 	my %stat_obj;
 
 	foreach (@{$statistics}) {
-		#my $node	= %{@{%{$_}->{statistics}}[0]}->{member}->{address}.':'.%{@{%{$_}->{statistics}}[0]}->{member}->{port};
 		my $node	= @{$_->{statistics}}[0]->{member}->{address}.':'.@{$_->{statistics}}[0]->{member}->{port};
 		$stat_obj{$node} = {__process_statistics($_)};
 	}
@@ -578,15 +598,26 @@ sub __process_pool_member_statistics {
 	return %stat_obj
 }
 
-sub __zero_fill {
-	my $val = shift; 
-	return ($val < 10 ? '0' . $val : $val)
+sub __process_cpu_statistics {
+	my $statistics	= shift;
+	my $cpu_cnt	= 0;
+	my %stat_obj	= (timestamp => __get_timestamp);
+
+	foreach my $cpu (@{$statistics}) {
+
+		foreach (@{$cpu}) {
+			$stat_obj{stats}{$cpu_cnt}{$_->{type}} = (($_->{value}{high})<<32)|(abs $_->{value}{low});
+		}
+		
+		$cpu_cnt++;
+	}
+
+	return %stat_obj
 }
 
-#sub _mutator_request {
-#	my ($self, %args)=@_;
-#	$args{module}	&& exists $mutators->{$args{module}}
-#}
+sub __zero_fill {
+	return ($_[0] < 10 ? '0' . $_[0] : $_[0])
+}
 
 =head3 get_system_information
 
@@ -613,8 +644,93 @@ The struct information is described below;
 =cut
 
 sub get_system_information {
+	return $_[0]->_request(module => 'System', interface => 'SystemInfo', method => 'get_system_information')
+}
+
+=head3 get_system_id ()
+
+Gets the unique identifier for the system. 
+
+=cut
+
+sub get_system_id {
+	return $_[0]->_request(module => 'System', interface => 'SystemInfo', method => 'get_system_id')
+}
+
+=head3 get_cpu_metrics ()
+
+Gets the CPU metrics for the CPU(s) on the platform.
+
+=cut
+
+sub get_cpu_metrics {
+	return $_[0]->_request(module => 'System', interface => 'SystemInfo', method => 'get_cpu_metrics');
+}
+
+=head3 get_cpu_metrics_stringified ()
+
+Gets the CPU metrics for the CPU(s) on the platform.
+
+=cut
+
+sub get_cpu_metrics_stringified {
 	my $self	= shift;
-	return $self->_request(module => 'System', interface => 'SystemInfo', method => 'get_system_information');
+	my $res;
+
+	my $metrics	= $self->get_cpu_metrics;
+	$res->{timestamp}= __get_timestamp;
+
+	foreach (@{$metrics->{cpus}}) {
+		$res->{@{$_}[0]->{value}}->{temp}	= @{$_}[1]->{value};
+		$res->{@{$_}[0]->{value}}->{fan}	= @{$_}[2]->{value};
+	}
+
+	return $res
+}
+
+sub __get_cpu_metric {
+	my($self,$cpu,$metric)=@_;
+	my $metrics	= $self->get_cpu_metrics_stringified();
+	exists $metrics->{$cpu} and return $metrics->{$cpu}->{$metric};
+}
+
+=head3 get_cpu_fan_speed ($cpu) 
+
+Returns the current CPU fan speed in RPM for the specified CPU.
+
+=cut
+
+sub get_cpu_fan_speed { 
+	return $_[0]->__get_cpu_metric($_[1],'fan') 
+}
+
+=head3 get_cpu_temp ($cpu) 
+
+Returns the current CPU temperature degrees celcius for the specified CPU.
+
+=cut
+
+sub get_cpu_temp { 
+	return $_[0]->__get_cpu_metric($_[1],'temp') 
+}
+
+=head3 get_cpu_usage_extended_information ()
+
+=cut
+
+sub get_cpu_usage_extended_information {
+	my($self,$id)	= @_;
+	$id		||= $self->{server};
+	return $self->_request(module => 'System', interface => 'SystemInfo', method => 'get_cpu_usage_extended_information', data => {host_ids => [$id]});
+}
+
+=head3 get_cpu_usage_extended_information_stringified ()
+
+=cut
+
+sub get_cpu_usage_extended_information_stringified {
+	my($self,$id)	= shift;
+	__process_cpu_statistics(@{$self->get_cpu_usage_extended_information($id)->{hosts}}[0]->{statistics});
 }
 
 =head3 get_cluster_list ()
@@ -624,8 +740,7 @@ Gets a list of the cluster names.
 =cut
 
 sub get_cluster_list {
-	my $self	= shift;
-	return $self->_request(module => 'System', interface => 'Cluster', method => 'get_list');
+	return $_[0]->_request(module => 'System', interface => 'Cluster', method => 'get_list');
 }
 
 =head3 get_failover_mode ()
@@ -635,8 +750,7 @@ Gets the current fail-over mode that the device is running in.
 =cut
 
 sub get_failover_mode {
-	my $self	= shift;
-	return $self->_request(module => 'System', interface => 'Failover', method => 'get_failover_mode');
+	return $_[0]->_request(module => 'System', interface => 'Failover', method => 'get_failover_mode');
 }
 
 =head3 get_failover_state ()
@@ -646,8 +760,17 @@ Gets the current fail-over state that the device is running in.
 =cut
 
 sub get_failover_state {
-	my $self	= shift;
-	return $self->_request(module => 'System', interface => 'Failover', method => 'get_failover_state');
+	return $_[0]->_request(module => 'System', interface => 'Failover', method => 'get_failover_state');
+}
+
+=head3 is_redundant ()
+
+Returns a boolean indicating the redundancy state of the device.
+
+=cut
+
+sub is_redundant {
+	return $_[0]->_request(module => 'System', interface => 'Failover', method => 'is_redundant');
 }
 
 =head3 get_cluster_enabled_state ()
@@ -657,8 +780,45 @@ Gets the cluster enabled states.
 =cut
 
 sub get_cluster_enabled_state {
+	return $_[0]->_request(module => 'System', interface => 'Cluster', method => 'get_cluster_enabled_state');
+}
+
+=head3 get_service_list () 
+
+Returns a list of all supported services on this host.
+
+=cut
+
+sub get_service_list {
+	return @{$_[0]->_request(module => 'System', interface => 'Services', method => 'get_list')}
+}
+
+=head3 get_service_status () 
+
+Returns the status of the specified service.
+
+=cut
+
+sub get_service_status {
+	my($self,$service)= shift;
+	return $self->_request(module => 'System', interface => 'Services', method => 'get_service_status', data => { services => $service });
+}
+
+=head3 get_all_service_statuses () 
+
+Returns the status of all services.
+
+=cut
+
+sub get_all_service_statuses {
 	my $self	= shift;
-	return $self->_request(module => 'System', interface => 'Cluster', method => 'get_cluster_enabled_state');
+	my %res;
+
+	foreach my $service (@{$self->_request(module => 'System', interface => 'Services', method => 'get_all_service_statuses')}) {
+		$res{$service->{service}}	= $service->{status}
+	}
+
+	return %res
 }
 
 =head3 save_configuration ($filename)
@@ -710,7 +870,7 @@ sub save_configuration {
 
 =head3 save_base_configuration ()
 
-	$ic->save_base_configuration();
+        $ic->save_base_configuration();
 
 Saves only the base configuration (VLANs, self IPs...). The filename specified when used with this mode will 
 be ignored, since configuration will be saved to /config/bigip_base.conf by default. 
@@ -718,13 +878,12 @@ be ignored, since configuration will be saved to /config/bigip_base.conf by defa
 =cut
 
 sub save_base_configuration {
-	my $self	= shift;
-	return ($self->__save_configuration('ignore','SAVE_BASE_LEVEL_CONFIG'));
+	return ($_[0]->__save_configuration('ignore','SAVE_BASE_LEVEL_CONFIG'))
 }
 
 =head3 save_high_level_configuration ()
 
-	$ic->save_high_level_configuration();
+        $ic->save_high_level_configuration();
 
 Saves only the high-level configuration (virtual servers, pools, members, monitors...). The filename specified 
 when used with this mode will be ignored, since configuration will be saved to /config/bigip.conf by default. 
@@ -732,8 +891,7 @@ when used with this mode will be ignored, since configuration will be saved to /
 =cut
 
 sub save_high_level_configuration {
-	my $self	= shift;
-	return ($self->__save_configuration('ignore','SAVE_HIGH_LEVEL_CONFIG'));
+	return ($_[0]->__save_configuration('ignore','SAVE_HIGH_LEVEL_CONFIG'))
 }
 
 
@@ -765,6 +923,48 @@ sub download_configuration {
 	return 1
 }
 
+=head3 get_configuration_list ()
+
+	my %config_list = $ic->get_configuration_list();
+
+Returns a list of the configuration archives present on the system.  the list is returned as a hash
+with the name of the configuration archive as the key, and the creation date of the configuration 
+archive as the value.
+
+The creation date uses the native date format of:
+
+	Day Mon D HH:MM:SS YYYY
+
+Where B<Day> is the three-letter common abbreviation of the day name, B<Mon> is the three letter common
+abbreviation of the month name and B<D> has the value range 1-31 with no leading zeros.
+
+=cut
+
+sub get_configuration_list {
+	my $self	= shift;
+	my %res;
+
+	foreach (@{$self->_request(module => 'System', interface => 'ConfigSync', method => 'get_configuration_list')}) {
+		$res{$_->{file_name}}	= $_->{file_datetime}
+	}
+
+	return %res;
+}
+
+=head3 delete_configuration ()
+
+	$ic->delete_configuration('file.ucs');
+
+Deletes the specified configuration archive from the system.
+
+=cut
+
+sub delete_configuration {
+	my ($self,$filename)	= @_;
+	$filename or croak 'No filename specified';
+	return $self->_request(module => 'System', interface => 'ConfigSync', method => 'delete_configuration', data => { filename => $filename });
+}
+
 =head3 get_interface_list ()
 
 	my @interfaces = $ic->get_interface_list();
@@ -774,9 +974,7 @@ Retuns an ordered list of all interfaces on the target device.
 =cut
 
 sub get_interface_list {
-	my $self	= shift;
-	my @inet	= sort @{$self->_request(module => 'Networking', interface => 'Interfaces', method => 'get_list')};
-	return @inet
+	return sort @{$_[0]->_request(module => 'Networking', interface => 'Interfaces', method => 'get_list')};
 }
 
 =head3 get_interface_statistics ($interface)
@@ -824,14 +1022,44 @@ sub get_interface_statistics_stringified {
 
 	my @virtuals	= $ic->get_vs_list();
 
-Returns an array of all defined virtual servers.
+B<Please note>: this method has been deprecated in future releases.  Please use get_ltm_vs_list instead.
+
+Returns an array of all defined LTM virtual servers.
 
 =cut
 
 sub get_vs_list {
-	my $self	= shift;
-	return @{$self->_request(module => 'LocalLB', interface => 'VirtualServer', method => 'get_list')};
+	return $_[0]->get_ltm_vs_list()
 }
+
+=head3 get_ltm_vs_list ()
+
+	my @ltm_virtuals = $ic->get_ltm_vs_list();
+
+Returns an array of all defined LTM virtual servers.
+
+=cut
+
+sub get_ltm_vs_list {
+	return @{$_[0]->_request(module => 'LocalLB', interface => 'VirtualServer', method => 'get_list')};
+}
+
+=head3 get_gtm_vs_list ()
+
+	my @gtm_virtuals = $ic->get_gtm_vs_list();
+
+Returns an array of the names of all defined GTM virtual servers.
+
+=cut
+
+sub get_gtm_vs_list {
+	my @members;
+	foreach (@{$_[0]->_request(module => 'GlobalLB', interface => 'VirtualServer', method => 'get_list')}) {
+		push @members, $_->{name}
+	}
+	return @members
+}
+
 
 =head3 get_vs_destination ($virtual_server)
 
@@ -849,31 +1077,78 @@ sub get_vs_destination {
 
 =head3 get_vs_enabled_state ($virtual_server)
 
-	print "Virtual server $vs is in state ",$ic->get_vs_enabled_state($vs),"\n";
+	print "LTM Virtual server $vs is in state ",$ic->get_vs_enabled_state($vs),"\n";
 
-Return the enabled state of the specified virtual virtual server.
+B<Please note>: this method has been deprecated in future releases.  Please use the B<get_ltm_vs_enabled_state()> instead.
+
+Return the enabled state of the specified LTM virtual server.
 
 =cut
 
 sub get_vs_enabled_state {
 	my ($self, $vs)	= @_;
+	return $self->get_ltm_vs_enabled_state($vs)
+}
+
+=head3 get_ltm_vs_enabled_state ($virtual_server)
+
+	print "LTM Virtual server $vs is in state ",$ic->get_ltm_vs_enabled_state($vs),"\n";
+
+Return the enabled state of the specified LTM virtual server.
+
+=cut
+
+sub get_ltm_vs_enabled_state {
+	my ($self, $vs)	= @_;
 	return @{$self->_request(module => 'LocalLB', interface => 'VirtualServer', method => 'get_enabled_state', data => {virtual_servers => [$vs]})}[0];
+}
+
+=head3 get_gtm_vs_enabled_state ($virtual_server)
+
+	print "GTM Virtual server $vs is in state ",$ic->get_gtm_vs_enabled_state($vs),"\n";
+
+Return the enabled state of the specified GTM virtual server.  The GTM server should be provided as a name only such as that
+returned from the B<get_gtm_vs_list> method.
+
+=cut
+
+sub get_gtm_vs_enabled_state {
+	my ($self, $vs)	= @_;
+	my %def	= $self->__get_gtm_vs_definition($vs);
+	return @{$self->_request(module => 'GlobalLB', interface => 'VirtualServer', method => 'get_enabled_state', data => {virtual_servers => [{%def}]})}[0];
 }
 
 =head3 get_vs_all_statistics ()
 
-Returns the traffic statistics for all configured virtual servers.  The statistics are returned as 
+B<Please Note>: This method has been deprecated in future releases.  Please use B<get_ltm_vs_all_statistics>.
+
+Returns the traffic statistics for all configured LTM virtual servers.  The statistics are returned as 
 VirtualServerStatistics struct hence this method is useful where access to raw statistical data is required.
 
-For parsed statistic data, see B<get_vs_statistics_stringified>.
+For parsed statistic data, see B<get_ltm_vs_statistics_stringified>.
 
 For specific information regarding data and units of measurement for statistics methods, please see the B<Notes> section.
 
 =cut
 
 sub get_vs_all_statistics {
-	my ($self, %args)= @_;
-	return $self->_request(module => 'LocalLB', interface => 'VirtualServer', method => 'get_all_statistics');
+	return $_[0]->get_ltm_vs_all_statistics()
+	#return $self->_request(module => 'LocalLB', interface => 'VirtualServer', method => 'get_all_statistics');
+}
+
+=head3 get_ltm_vs_all_statistics ()
+
+Returns the traffic statistics for all configured LTM virtual servers.  The statistics are returned as 
+VirtualServerStatistics struct hence this method is useful where access to raw statistical data is required.
+
+For parsed statistic data, see B<get_ltm_vs_statistics_stringified>.
+
+For specific information regarding data and units of measurement for statistics methods, please see the B<Notes> section.
+
+=cut
+
+sub get_ltm_vs_all_statistics {
+	return $_[0]->_request(module => 'LocalLB', interface => 'VirtualServer', method => 'get_all_statistics');
 }
 
 =head3 get_vs_statistics ($virtual_server)
@@ -941,14 +1216,29 @@ sub get_default_pool_name {
 
 	print join " ", ($ic->get_pool_list());
 
-Returns a list of all pools in the target system.
+Returns a list of all LTM pools in the target system.
+
+Note that this method has been deprecated in future releases - please use B<get_ltm_vs_list> instead.
 
 =cut
 
 sub get_pool_list {
-	my $self	= shift;
-	return @{$self->_request(module => 'LocalLB', interface => 'Pool', method => 'get_list')};
+	return $_[0]->get_ltm_pool_list()
+	#return @{$_[0]->_request(module => 'LocalLB', interface => 'Pool', method => 'get_list')};
 }
+
+=head3 get_ltm_pool_list ()
+
+	print join " ", ($ic->get_ltm_pool_list());
+
+Returns a list of all LTM pools in the target system.
+
+=cut
+
+sub get_ltm_pool_list {
+	return @{$_[0]->_request(module => 'LocalLB', interface => 'Pool', method => 'get_list')};
+}
+
 
 =head3 get_pool_members ($pool)
 
@@ -960,22 +1250,64 @@ sub get_pool_list {
 		}
 	}
 
-Returns a list of the pool members for the specified pool.  This method takes one mandatory parameter; the name of the pool.
+B<Please note>: this method has been deprecated in future releases.  Please use the B<get_ltm_pool_members> method instead.
+
+Returns a list of the pool members for the specified LTM pool.  This method takes one mandatory parameter; the name of the pool.
 
 Pool member are returned in the format B<IP_address:service_port>.
 
 =cut 
 
 sub get_pool_members {
+	my ($self, $pool)=@_;
+	return $self->get_ltm_pool_members($pool)
+	#my ($self, $pool)= @_;
+	#my @members;
+	#foreach (@{@{$self->__get_pool_members($pool,$module)}[0]}) {push @members, ($_->{address}.':'.$_->{port})}
+	#return @members;
+}
+
+=head3 get_ltm_pool_members ($pool)
+
+	foreach my $pool ($ic->get_ltm_pool_list()) {
+		print "\n\n$pool:\n";
+
+		foreach my $member ($ic->get_ltm_pool_members($pool)) {
+			print "\t$member\n";
+		}
+	}
+
+Returns a list of the pool members for the specified LTM pool.  This method takes one mandatory parameter; the name of the pool.
+
+Pool member are returned in the format B<IP_address:service_port>.
+
+=cut 
+
+sub get_ltm_pool_members {
 	my ($self, $pool)= @_;
 	my @members;
-	foreach (@{@{$self->__get_pool_members($pool)}[0]}) {push @members, ($_->{address}.':'.$_->{port})}
+	foreach (@{@{$self->__get_pool_members($pool,'LocalLB')}[0]}) {push @members, ($_->{address}.':'.$_->{port})}
 	return @members;
 }
 
+=head3 get_gtm_pool_members ($pool)
+
+Returns a list of the pool members for the specified GTM pool.  This method takes one mandatory parameter; the name of the pool.
+
+Pool member are returned in the format B<IP_address:service_port>.
+
+=cut 
+
+sub get_gtm_pool_members {
+	my ($self,$pool)=@_;
+	my @members;
+	foreach (@{@{$self->__get_pool_members($pool,'GlobalLB')}[0]}) {push @members, $_->{member}->{address}.':'.$_->{member}->{port}}
+	return @members
+}
+
 sub __get_pool_members {
-	my ($self, $pool)= @_;
-	return $self->_request(module => 'LocalLB', interface => 'Pool', method => 'get_member', data => {pool_names => [$pool]});
+	my ($self, $pool, $module)= @_;
+	return $self->_request(module => $module, interface => 'Pool', method => 'get_member', data => {pool_names => [$pool]});
 }
 
 =head3 get_pool_statistics ($pool)
@@ -1072,6 +1404,36 @@ sub get_all_pool_member_statistics {
 	return $self->_request(module => 'LocalLB', interface => 'PoolMember', method => 'get_all_statistics', data => {pool_names => [$pool]});
 }
 
+=head3 get_connection_list ()
+
+Returns a list of active connections as a list of ConnectionID objects.
+
+=cut
+
+sub get_connection_list {
+	return $_[0]->_request(module => 'System', interface => 'Connections', method => 'get_list');
+}
+
+=head3 get_all_active_connections ()
+
+Gets all active connections in details on the device.
+
+=cut
+
+sub get_all_active_connections {
+	return $_[0]->_request(module => 'System', interface => 'Connections', method => 'get_all_active_connections');
+}
+
+=head3 get_active_connections_count()
+
+Returns the number of all active connections on the device.
+
+=cut
+
+sub get_active_connections_count {
+	return scalar @{$_[0]->get_all_active_connections()}
+}
+
 =head3 get_node_list ()
 
 	print join "\n", ($ic->get_node_list());
@@ -1083,8 +1445,7 @@ Nodes are returned as ipv4 addresses.
 =cut 
 
 sub get_node_list {
-	my $self	= shift;
-	return $self->_request(module => 'LocalLB', interface => 'NodeAddress', method => 'get_list');
+	return @{$_[0]->_request(module => 'LocalLB', interface => 'NodeAddress', method => 'get_list')}
 }
 
 =head3 get_screen_name ($node)
@@ -1098,15 +1459,15 @@ Retuns the screen name of the specified node.
 =cut 
 
 sub get_screen_name {
-	my ($self, %args)= @_;
-	return $self->_request(module => 'LocalLB', interface => 'NodeAddress', method => 'get_screen_name', data => {node_addresses => $args{node_addresses}});
+	my ($self, $node)= @_;
+	return @{$self->_request(module => 'LocalLB', interface => 'NodeAddress', method => 'get_screen_name', data => {node_addresses => [$node]})}[0]
 }
 
 =head3 get_node_status ($node)
 
 	$ic->get_node_status(
 
-Returns the status of the specified node as a StatusObject struct.
+Returns the status of the specified node as a ObjectStatus object.
 
 For formatted node status information, see the B<get_node_status_as_string()> method.
 
@@ -1114,7 +1475,7 @@ For formatted node status information, see the B<get_node_status_as_string()> me
 
 sub get_node_status {
 	my ($self, $node)= @_;
-	return $self->_request(module => 'LocalLB', interface => 'NodeAddress', method => 'get_object_status', data => {node_addresses => [$node]});
+	return @{$self->_request(module => 'LocalLB', interface => 'NodeAddress', method => 'get_object_status', data => {node_addresses => [$node]})}[0]
 }
 
 =head3 get_node_availability_status ($node)
@@ -1215,6 +1576,49 @@ For specific information regarding data and units of measurement for statistics 
 sub get_node_statistics_stringified {
 	my ($self, $node)= @_;
 	return __process_statistics($self->get_node_statistics($node));
+}
+
+=head3 get_gtm_pool_list ()
+
+Returns a list of GTM pools.
+
+=cut
+
+sub get_gtm_pool_list {
+	return @{$_[0]->_request(module => 'GlobalLB', interface => 'Pool', method => 'get_list')}
+}
+
+=head3 get_gtm_pool_description ()
+
+Returns a description of the specified GTM pool.
+
+=cut
+
+sub get_gtm_pool_description {
+	my ($self, $pool)=@_;
+	return @{$self->_request(module => 'GlobalLB', interface => 'Pool', method => 'get_description', data => {pool_names => [$pool]})}[0];
+}
+
+=head3 get_gtm_vs_all_statistics ()
+
+Returns the traffic statistics for all configured GTM virtual servers.  The statistics are returned as 
+VirtualServerStatistics struct hence this method is useful where access to raw statistical data is required.
+
+For parsed statistic data, see B<get_gtm_vs_statistics_stringified>.
+
+For specific information regarding data and units of measurement for statistics methods, please see the B<Notes> section.
+
+=cut
+
+sub get_gtm_vs_all_statistics {
+	return $_[0]->_request(module => 'GlobalLB', interface => 'VirtualServer', method => 'get_all_statistics');
+}
+
+sub __get_gtm_vs_definition {
+	my ($self, $vs)=@_;
+	foreach (@{$self->_request(module => 'GlobalLB', interface => 'VirtualServer', method => 'get_list')}) {
+		return %{$_} if ($_->{name} eq $vs)
+	}
 }
 
 =head3 get_event_subscription
@@ -1357,6 +1761,8 @@ It is the callers responsibility to convert the ULong struct for all other non-s
 =head1 AUTHOR
 
 Luke Poskitt, E<lt>ltp@cpan.orgE<gt>
+
+Thanks to Eric Welch, E<lt>erik.welch@gmail.comE<gt>, for input and feedback.
 
 =head1 LICENSE AND COPYRIGHT
 
