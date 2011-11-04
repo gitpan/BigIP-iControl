@@ -17,3 +17,6 @@ Revision history for BigIP::iControl
 	-Changed some existing methods to ltm specific methods so as to avoid conflict with similarly named GTM 
 	methods (thanks to Eric Welch for his feedback and input).
 	-Numerous other fixes and enhancements.
+
+0.041	2011-11-04/17:10:00
+	-Fixes bugs described in CPAN RT #72155

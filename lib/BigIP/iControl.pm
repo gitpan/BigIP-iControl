@@ -7,7 +7,7 @@ use Carp qw(confess croak);
 use Exporter;
 use SOAP::Lite;
 
-our $VERSION    = '0.04';
+our $VERSION    = '0.041';
 
 =head1 NAME
 
@@ -1522,7 +1522,7 @@ sub get_node_status_as_string {
 	
 	$status_key or ($status_key = 'status_description');
 	
-	return @{$self->get_node_status($node)}[0]->{$status_key};
+	return $self->get_node_status($node)->{$status_key};
 }
 
 =head3 get_node_monitor_status ($node)
