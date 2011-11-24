@@ -7,7 +7,7 @@ use Carp qw(confess croak);
 use Exporter;
 use SOAP::Lite;
 
-our $VERSION    = '0.041';
+our $VERSION    = '0.05';
 
 =head1 NAME
 
@@ -108,19 +108,30 @@ our $modules    = {
 							get_statistics		=> 'node_addresses'
 							}
 				},
-	Management	=> 	{
+	Management	=>	{
 				EventSubscription=>	{
 							create			=> 'sub_detail_list',
 							get_list		=> 0
 							}
 				},
-	Networking	=> 	{
+	Networking	=>	{
 				Interfaces	=>	{
 							get_list		=> 0,
 							get_statistics		=> 'interfaces'
+							},
+				Trunk		=>	{
+							get_interface		=> {trunks => 1},
+							get_lacp_enabled_state	=> {trunks => 1},
+							get_active_lacp_state	=> {trunks => 1},
+							get_list		=> 0,
+							get_configured_member_count=> {trunks => 1},
+							get_operational_member_count=> {trunks => 1},
+							get_media_speed		=> {trunks => 1},
+							get_media_status	=> {trunks => 1},
+							get_statistics		=> {trunks => 1}
 							}
 				},
-	System		=> 	{
+	System		=>	{
 				ConfigSync	=>	{
 							get_configuration_list	=> 0,
 							delete_configuration	=> {filename => 1},
@@ -152,7 +163,7 @@ our $modules    = {
 							get_all_service_statuses=> 0
 							}
 				},
-	WebAccelerator	=> 	{}
+	WebAccelerator	=>	{}
 	};
 
 our $event_types= {
@@ -215,167 +226,167 @@ sub BEGIN {
 
 	$urn_map= {
                 '{urn:iControl}ASM.ApplyLearningType'					=> 1,
-                '{urn:iControl}ASM.DynamicSessionsInUrlType' 				=> 1,
-                '{urn:iControl}ASM.FlagState' 						=> 1,
-                '{urn:iControl}ASM.PolicyTemplate' 					=> 1,
-                '{urn:iControl}ASM.ProtocolType' 					=> 1,
-                '{urn:iControl}ASM.SeverityName' 					=> 1,
-                '{urn:iControl}ASM.ViolationName' 					=> 1,
-                '{urn:iControl}ASM.WebApplicationLanguage' 				=> 1,
-                '{urn:iControl}Common.ArmedState' 					=> 1,
-                '{urn:iControl}Common.AuthenticationMethod' 				=> 1,
-                '{urn:iControl}Common.AvailabilityStatus' 				=> 1,
-                '{urn:iControl}Common.DaemonStatus' 					=> 1,
-                '{urn:iControl}Common.EnabledState' 					=> 1,
-                '{urn:iControl}Common.EnabledStatus' 					=> 1,
-                '{urn:iControl}Common.FileChainType' 					=> 1,
-                '{urn:iControl}Common.HAAction' 					=> 1,
-                '{urn:iControl}Common.HAState' 						=> 1,
-                '{urn:iControl}Common.IPHostType' 					=> 1,
-                '{urn:iControl}Common.ProtocolType' 					=> 1,
-                '{urn:iControl}Common.SourcePortBehavior' 				=> 1,
-                '{urn:iControl}Common.StatisticType' 					=> 1,
-                '{urn:iControl}Common.TMOSModule' 					=> 1,
-                '{urn:iControl}GlobalLB.AddressType' 					=> 1,
-                '{urn:iControl}GlobalLB.AutoConfigurationState' 			=> 1,
-                '{urn:iControl}GlobalLB.AvailabilityDependency' 			=> 1,
-                '{urn:iControl}GlobalLB.LBMethod' 					=> 1,
-                '{urn:iControl}GlobalLB.LDNSProbeProtocol' 				=> 1,
-                '{urn:iControl}GlobalLB.LinkWeightType' 				=> 1,
-                '{urn:iControl}GlobalLB.MetricLimitType' 				=> 1,
-                '{urn:iControl}GlobalLB.MonitorAssociationRemovalRule' 			=> 1,
-                '{urn:iControl}GlobalLB.MonitorInstanceStateType' 			=> 1,
-                '{urn:iControl}GlobalLB.MonitorRuleType' 				=> 1,
-                '{urn:iControl}GlobalLB.RegionDBType' 					=> 1,
-                '{urn:iControl}GlobalLB.RegionType' 					=> 1,
-                '{urn:iControl}GlobalLB.ServerType' 					=> 1,
-                '{urn:iControl}GlobalLB.Application.ApplicationObjectType' 		=> 1,
-                '{urn:iControl}GlobalLB.DNSSECKey.KeyAlgorithm' 			=> 1,
-                '{urn:iControl}GlobalLB.DNSSECKey.KeyType' 				=> 1,
-                '{urn:iControl}GlobalLB.Monitor.IntPropertyType' 			=> 1,
-                '{urn:iControl}GlobalLB.Monitor.StrPropertyType' 			=> 1,
-                '{urn:iControl}GlobalLB.Monitor.TemplateType' 				=> 1,
-                '{urn:iControl}LocalLB.AddressType' 					=> 1,
-                '{urn:iControl}LocalLB.AuthenticationMethod' 				=> 1,
-                '{urn:iControl}LocalLB.AvailabilityStatus' 				=> 1,
-                '{urn:iControl}LocalLB.ClientSSLCertificateMode' 			=> 1,
-                '{urn:iControl}LocalLB.ClonePoolType' 					=> 1,
-                '{urn:iControl}LocalLB.CompressionMethod' 				=> 1,
-                '{urn:iControl}LocalLB.CookiePersistenceMethod' 			=> 1,
-                '{urn:iControl}LocalLB.CredentialSource' 				=> 1,
-                '{urn:iControl}LocalLB.EnabledStatus' 					=> 1,
-                '{urn:iControl}LocalLB.HardwareAccelerationMode' 			=> 1,
-                '{urn:iControl}LocalLB.HttpChunkMode' 					=> 1,
-                '{urn:iControl}LocalLB.HttpCompressionMode' 				=> 1,
-                '{urn:iControl}LocalLB.HttpRedirectRewriteMode' 			=> 1,
-                '{urn:iControl}LocalLB.LBMethod' 					=> 1,
-                '{urn:iControl}LocalLB.MonitorAssociationRemovalRule' 			=> 1,
-                '{urn:iControl}LocalLB.MonitorInstanceStateType' 			=> 1,
-                '{urn:iControl}LocalLB.MonitorRuleType' 				=> 1,
+                '{urn:iControl}ASM.DynamicSessionsInUrlType'				=> 1,
+                '{urn:iControl}ASM.FlagState'						=> 1,
+                '{urn:iControl}ASM.PolicyTemplate'					=> 1,
+                '{urn:iControl}ASM.ProtocolType'					=> 1,
+                '{urn:iControl}ASM.SeverityName'					=> 1,
+                '{urn:iControl}ASM.ViolationName'					=> 1,
+                '{urn:iControl}ASM.WebApplicationLanguage'				=> 1,
+                '{urn:iControl}Common.ArmedState'					=> 1,
+                '{urn:iControl}Common.AuthenticationMethod'				=> 1,
+                '{urn:iControl}Common.AvailabilityStatus'				=> 1,
+                '{urn:iControl}Common.DaemonStatus'					=> 1,
+                '{urn:iControl}Common.EnabledState'					=> 1,
+                '{urn:iControl}Common.EnabledStatus'					=> 1,
+                '{urn:iControl}Common.FileChainType'					=> 1,
+                '{urn:iControl}Common.HAAction'						=> 1,
+                '{urn:iControl}Common.HAState'						=> 1,
+                '{urn:iControl}Common.IPHostType'					=> 1,
+                '{urn:iControl}Common.ProtocolType'					=> 1,
+                '{urn:iControl}Common.SourcePortBehavior'				=> 1,
+                '{urn:iControl}Common.StatisticType'					=> 1,
+                '{urn:iControl}Common.TMOSModule'					=> 1,
+                '{urn:iControl}GlobalLB.AddressType'					=> 1,
+                '{urn:iControl}GlobalLB.AutoConfigurationState'				=> 1,
+                '{urn:iControl}GlobalLB.AvailabilityDependency'				=> 1,
+                '{urn:iControl}GlobalLB.LBMethod'					=> 1,
+                '{urn:iControl}GlobalLB.LDNSProbeProtocol'				=> 1,
+                '{urn:iControl}GlobalLB.LinkWeightType'					=> 1,
+                '{urn:iControl}GlobalLB.MetricLimitType'				=> 1,
+                '{urn:iControl}GlobalLB.MonitorAssociationRemovalRule'			=> 1,
+                '{urn:iControl}GlobalLB.MonitorInstanceStateType'			=> 1,
+                '{urn:iControl}GlobalLB.MonitorRuleType'				=> 1,
+                '{urn:iControl}GlobalLB.RegionDBType'					=> 1,
+                '{urn:iControl}GlobalLB.RegionType'					=> 1,
+                '{urn:iControl}GlobalLB.ServerType'					=> 1,
+                '{urn:iControl}GlobalLB.Application.ApplicationObjectType'		=> 1,
+                '{urn:iControl}GlobalLB.DNSSECKey.KeyAlgorithm'				=> 1,
+                '{urn:iControl}GlobalLB.DNSSECKey.KeyType'				=> 1,
+                '{urn:iControl}GlobalLB.Monitor.IntPropertyType'			=> 1,
+                '{urn:iControl}GlobalLB.Monitor.StrPropertyType'			=> 1,
+                '{urn:iControl}GlobalLB.Monitor.TemplateType'				=> 1,
+                '{urn:iControl}LocalLB.AddressType'					=> 1,
+                '{urn:iControl}LocalLB.AuthenticationMethod'				=> 1,
+                '{urn:iControl}LocalLB.AvailabilityStatus'				=> 1,
+                '{urn:iControl}LocalLB.ClientSSLCertificateMode'			=> 1,
+                '{urn:iControl}LocalLB.ClonePoolType'					=> 1,
+                '{urn:iControl}LocalLB.CompressionMethod'				=> 1,
+                '{urn:iControl}LocalLB.CookiePersistenceMethod'				=> 1,
+                '{urn:iControl}LocalLB.CredentialSource'				=> 1,
+                '{urn:iControl}LocalLB.EnabledStatus'					=> 1,
+                '{urn:iControl}LocalLB.HardwareAccelerationMode'			=> 1,
+                '{urn:iControl}LocalLB.HttpChunkMode'					=> 1,
+                '{urn:iControl}LocalLB.HttpCompressionMode'				=> 1,
+                '{urn:iControl}LocalLB.HttpRedirectRewriteMode'				=> 1,
+                '{urn:iControl}LocalLB.LBMethod'					=> 1,
+                '{urn:iControl}LocalLB.MonitorAssociationRemovalRule'			=> 1,
+                '{urn:iControl}LocalLB.MonitorInstanceStateType'			=> 1,
+                '{urn:iControl}LocalLB.MonitorRuleType'					=> 1,
                 '{urn:iControl}LocalLB.MonitorStatus'					=> 1,
-                '{urn:iControl}LocalLB.PersistenceMode' 				=> 1,
-                '{urn:iControl}LocalLB.ProfileContextType' 				=> 1,
-                '{urn:iControl}LocalLB.ProfileMode' 					=> 1,
-                '{urn:iControl}LocalLB.ProfileType' 					=> 1,
-                '{urn:iControl}LocalLB.RamCacheCacheControlMode' 			=> 1,
-                '{urn:iControl}LocalLB.RtspProxyType' 					=> 1,
-                '{urn:iControl}LocalLB.SSLOption' 					=> 1,
-                '{urn:iControl}LocalLB.ServerSSLCertificateMode' 			=> 1,
-                '{urn:iControl}LocalLB.ServiceDownAction' 				=> 1,
-                '{urn:iControl}LocalLB.SessionStatus' 					=> 1,
-                '{urn:iControl}LocalLB.SnatType' 					=> 1,
-                '{urn:iControl}LocalLB.TCPCongestionControlMode' 			=> 1,
-                '{urn:iControl}LocalLB.TCPOptionMode' 					=> 1,
-                '{urn:iControl}LocalLB.UncleanShutdownMode' 				=> 1,
-                '{urn:iControl}LocalLB.VirtualAddressStatusDependency' 			=> 1,
-                '{urn:iControl}LocalLB.Class.ClassType' 				=> 1,
-                '{urn:iControl}LocalLB.Class.FileFormatType' 				=> 1,
-                '{urn:iControl}LocalLB.Class.FileModeType' 				=> 1,
-                '{urn:iControl}LocalLB.Monitor.IntPropertyType' 			=> 1,
-                '{urn:iControl}LocalLB.Monitor.StrPropertyType' 			=> 1,
-                '{urn:iControl}LocalLB.Monitor.TemplateType' 				=> 1,
+                '{urn:iControl}LocalLB.PersistenceMode'					=> 1,
+                '{urn:iControl}LocalLB.ProfileContextType'				=> 1,
+                '{urn:iControl}LocalLB.ProfileMode'					=> 1,
+                '{urn:iControl}LocalLB.ProfileType'					=> 1,
+                '{urn:iControl}LocalLB.RamCacheCacheControlMode'			=> 1,
+                '{urn:iControl}LocalLB.RtspProxyType'					=> 1,
+                '{urn:iControl}LocalLB.SSLOption'					=> 1,
+                '{urn:iControl}LocalLB.ServerSSLCertificateMode'			=> 1,
+                '{urn:iControl}LocalLB.ServiceDownAction'				=> 1,
+                '{urn:iControl}LocalLB.SessionStatus'					=> 1,
+                '{urn:iControl}LocalLB.SnatType'					=> 1,
+                '{urn:iControl}LocalLB.TCPCongestionControlMode'			=> 1,
+                '{urn:iControl}LocalLB.TCPOptionMode'					=> 1,
+                '{urn:iControl}LocalLB.UncleanShutdownMode'				=> 1,
+                '{urn:iControl}LocalLB.VirtualAddressStatusDependency'			=> 1,
+                '{urn:iControl}LocalLB.Class.ClassType'					=> 1,
+                '{urn:iControl}LocalLB.Class.FileFormatType'				=> 1,
+                '{urn:iControl}LocalLB.Class.FileModeType'				=> 1,
+                '{urn:iControl}LocalLB.Monitor.IntPropertyType'				=> 1,
+                '{urn:iControl}LocalLB.Monitor.StrPropertyType'				=> 1,
+                '{urn:iControl}LocalLB.Monitor.TemplateType'				=> 1,
                 '{urn:iControl}LocalLB.ProfilePersistence.PersistenceHashMethod'	=> 1,
-                '{urn:iControl}LocalLB.ProfileUserStatistic.UserStatisticKey' 		=> 1,
+                '{urn:iControl}LocalLB.ProfileUserStatistic.UserStatisticKey'		=> 1,
                 '{urn:iControl}LocalLB.RAMCacheInformation.RAMCacheVaryType'		=> 1,
-                '{urn:iControl}LocalLB.RateClass.DirectionType' 			=> 1,
-                '{urn:iControl}LocalLB.RateClass.DropPolicyType' 			=> 1,
-                '{urn:iControl}LocalLB.RateClass.QueueType' 				=> 1,
-                '{urn:iControl}LocalLB.RateClass.UnitType' 				=> 1,
+                '{urn:iControl}LocalLB.RateClass.DirectionType'				=> 1,
+                '{urn:iControl}LocalLB.RateClass.DropPolicyType'			=> 1,
+                '{urn:iControl}LocalLB.RateClass.QueueType'				=> 1,
+                '{urn:iControl}LocalLB.RateClass.UnitType'				=> 1,
                 '{urn:iControl}LocalLB.VirtualServer.VirtualServerCMPEnableMode'	=> 1,
-                '{urn:iControl}LocalLB.VirtualServer.VirtualServerType' 		=> 1,
-                '{urn:iControl}Management.DebugLevel' 					=> 1,
-                '{urn:iControl}Management.LDAPPasswordEncodingOption' 			=> 1,
-                '{urn:iControl}Management.LDAPSSLOption' 				=> 1,
-                '{urn:iControl}Management.LDAPSearchMethod' 				=> 1,
-                '{urn:iControl}Management.LDAPSearchScope' 				=> 1,
-                '{urn:iControl}Management.OCSPDigestMethod' 				=> 1,
-                '{urn:iControl}Management.ZoneType' 					=> 1,
-                '{urn:iControl}Management.EventNotification.EventDataType' 		=> 1,
-                '{urn:iControl}Management.EventSubscription.AuthenticationMode' 	=> 1,
-                '{urn:iControl}Management.EventSubscription.EventType' 			=> 1,
-                '{urn:iControl}Management.EventSubscription.ObjectType' 		=> 1,
-                '{urn:iControl}Management.EventSubscription.SubscriptionStatusCode' 	=> 1,
-                '{urn:iControl}Management.KeyCertificate.CertificateType' 		=> 1,
-                '{urn:iControl}Management.KeyCertificate.KeyType' 			=> 1,
-                '{urn:iControl}Management.KeyCertificate.ManagementModeType' 		=> 1,
-                '{urn:iControl}Management.KeyCertificate.SecurityType' 			=> 1,
-                '{urn:iControl}Management.KeyCertificate.ValidityType' 			=> 1,
-                '{urn:iControl}Management.Provision.ProvisionLevel' 			=> 1,
-                '{urn:iControl}Management.SNMPConfiguration.AuthType' 			=> 1,
-                '{urn:iControl}Management.SNMPConfiguration.DiskCheckType' 		=> 1,
-                '{urn:iControl}Management.SNMPConfiguration.LevelType' 			=> 1,
-                '{urn:iControl}Management.SNMPConfiguration.ModelType' 			=> 1,
-                '{urn:iControl}Management.SNMPConfiguration.PrefixType' 		=> 1,
+                '{urn:iControl}LocalLB.VirtualServer.VirtualServerType'			=> 1,
+                '{urn:iControl}Management.DebugLevel'					=> 1,
+                '{urn:iControl}Management.LDAPPasswordEncodingOption'			=> 1,
+                '{urn:iControl}Management.LDAPSSLOption'				=> 1,
+                '{urn:iControl}Management.LDAPSearchMethod'				=> 1,
+                '{urn:iControl}Management.LDAPSearchScope'				=> 1,
+                '{urn:iControl}Management.OCSPDigestMethod'				=> 1,
+                '{urn:iControl}Management.ZoneType'					=> 1,
+                '{urn:iControl}Management.EventNotification.EventDataType'		=> 1,
+                '{urn:iControl}Management.EventSubscription.AuthenticationMode'		=> 1,
+                '{urn:iControl}Management.EventSubscription.EventType'			=> 1,
+                '{urn:iControl}Management.EventSubscription.ObjectType'			=> 1,
+                '{urn:iControl}Management.EventSubscription.SubscriptionStatusCode'	=> 1,
+                '{urn:iControl}Management.KeyCertificate.CertificateType'		=> 1,
+                '{urn:iControl}Management.KeyCertificate.KeyType'			=> 1,
+                '{urn:iControl}Management.KeyCertificate.ManagementModeType'		=> 1,
+                '{urn:iControl}Management.KeyCertificate.SecurityType'			=> 1,
+                '{urn:iControl}Management.KeyCertificate.ValidityType'			=> 1,
+                '{urn:iControl}Management.Provision.ProvisionLevel'			=> 1,
+                '{urn:iControl}Management.SNMPConfiguration.AuthType'			=> 1,
+                '{urn:iControl}Management.SNMPConfiguration.DiskCheckType'		=> 1,
+                '{urn:iControl}Management.SNMPConfiguration.LevelType'			=> 1,
+                '{urn:iControl}Management.SNMPConfiguration.ModelType'			=> 1,
+                '{urn:iControl}Management.SNMPConfiguration.PrefixType'			=> 1,
                 '{urn:iControl}Management.SNMPConfiguration.PrivacyProtocolType'	=> 1,
-                '{urn:iControl}Management.SNMPConfiguration.SinkType' 			=> 1,
-                '{urn:iControl}Management.SNMPConfiguration.TransportType' 		=> 1,
-                '{urn:iControl}Management.SNMPConfiguration.ViewType' 			=> 1,
-                '{urn:iControl}Management.UserManagement.UserRole' 			=> 1,
-                '{urn:iControl}Networking.FilterAction' 				=> 1,
-                '{urn:iControl}Networking.FlowControlType' 				=> 1,
-                '{urn:iControl}Networking.LearningMode' 				=> 1,
-                '{urn:iControl}Networking.MediaStatus' 					=> 1,
-                '{urn:iControl}Networking.MemberTagType' 				=> 1,
-                '{urn:iControl}Networking.MemberType' 					=> 1,
-                '{urn:iControl}Networking.PhyMasterSlaveMode' 				=> 1,
-                '{urn:iControl}Networking.RouteEntryType' 				=> 1,
-                '{urn:iControl}Networking.STPLinkType' 					=> 1,
-                '{urn:iControl}Networking.STPModeType' 					=> 1,
-                '{urn:iControl}Networking.STPRoleType' 					=> 1,
-                '{urn:iControl}Networking.STPStateType' 				=> 1,
-                '{urn:iControl}Networking.ARP.NDPState' 				=> 1,
-                '{urn:iControl}Networking.Interfaces.MediaType' 			=> 1,
-                '{urn:iControl}Networking.ProfileWCCPGRE.WCCPGREForwarding' 		=> 1,
-                '{urn:iControl}Networking.STPInstance.PathCostType' 			=> 1,
-                '{urn:iControl}Networking.SelfIPPortLockdown.AllowMode' 		=> 1,
-                '{urn:iControl}Networking.Trunk.DistributionHashOption' 		=> 1,
-                '{urn:iControl}Networking.Trunk.LACPTimeoutOption' 			=> 1,
-                '{urn:iControl}Networking.Trunk.LinkSelectionPolicy' 			=> 1,
-                '{urn:iControl}Networking.Tunnel.TunnelDirection' 			=> 1,
-                '{urn:iControl}Networking.VLANGroup.VLANGroupTransparency' 		=> 1,
-                '{urn:iControl}Networking.iSessionLocalInterface.NatSourceAddress' 	=> 1,
-                '{urn:iControl}Networking.iSessionPeerDiscovery.DiscoveryMode' 		=> 1,
-                '{urn:iControl}Networking.iSessionPeerDiscovery.FilterMode' 		=> 1,
-                '{urn:iControl}Networking.iSessionRemoteInterface.NatSourceAddress' 	=> 1,
-                '{urn:iControl}Networking.iSessionRemoteInterface.OriginState' 		=> 1,
-                '{urn:iControl}System.CPUMetricType' 					=> 1,
-                '{urn:iControl}System.FanMetricType' 					=> 1,
-                '{urn:iControl}System.HardwareType' 					=> 1,
-                '{urn:iControl}System.PSMetricType' 					=> 1,
-                '{urn:iControl}System.TemperatureMetricType' 				=> 1,
-                '{urn:iControl}System.ConfigSync.ConfigExcludeComponent' 		=> 1,
-                '{urn:iControl}System.ConfigSync.ConfigIncludeComponent' 		=> 1,
-                '{urn:iControl}System.ConfigSync.LoadMode' 				=> 1,
-                '{urn:iControl}System.ConfigSync.SaveMode' 				=> 1,
-                '{urn:iControl}System.ConfigSync.SyncMode' 				=> 1,
-                '{urn:iControl}System.Disk.RAIDStatus' 					=> 1,
-                '{urn:iControl}System.Failover.FailoverMode' 				=> 1,
-                '{urn:iControl}System.Failover.FailoverState' 				=> 1,
-                '{urn:iControl}System.Services.ServiceAction' 				=> 1,
-                '{urn:iControl}System.Services.ServiceStatusType' 			=> 1,
-                '{urn:iControl}System.Services.ServiceType' 				=> 1,
-                '{urn:iControl}System.Statistics.GtmIQueryState' 			=> 1,
-                '{urn:iControl}System.Statistics.GtmPathStatisticObjectType' 		=> 1,
+                '{urn:iControl}Management.SNMPConfiguration.SinkType'			=> 1,
+                '{urn:iControl}Management.SNMPConfiguration.TransportType'		=> 1,
+                '{urn:iControl}Management.SNMPConfiguration.ViewType'			=> 1,
+                '{urn:iControl}Management.UserManagement.UserRole'			=> 1,
+                '{urn:iControl}Networking.FilterAction'					=> 1,
+                '{urn:iControl}Networking.FlowControlType'				=> 1,
+                '{urn:iControl}Networking.LearningMode'					=> 1,
+                '{urn:iControl}Networking.MediaStatus'					=> 1,
+                '{urn:iControl}Networking.MemberTagType'				=> 1,
+                '{urn:iControl}Networking.MemberType'					=> 1,
+                '{urn:iControl}Networking.PhyMasterSlaveMode'				=> 1,
+                '{urn:iControl}Networking.RouteEntryType'				=> 1,
+                '{urn:iControl}Networking.STPLinkType'					=> 1,
+                '{urn:iControl}Networking.STPModeType'					=> 1,
+                '{urn:iControl}Networking.STPRoleType'					=> 1,
+                '{urn:iControl}Networking.STPStateType'					=> 1,
+                '{urn:iControl}Networking.ARP.NDPState'					=> 1,
+                '{urn:iControl}Networking.Interfaces.MediaType'				=> 1,
+                '{urn:iControl}Networking.ProfileWCCPGRE.WCCPGREForwarding'		=> 1,
+                '{urn:iControl}Networking.STPInstance.PathCostType'			=> 1,
+                '{urn:iControl}Networking.SelfIPPortLockdown.AllowMode'			=> 1,
+                '{urn:iControl}Networking.Trunk.DistributionHashOption'			=> 1,
+                '{urn:iControl}Networking.Trunk.LACPTimeoutOption'			=> 1,
+                '{urn:iControl}Networking.Trunk.LinkSelectionPolicy'			=> 1,
+                '{urn:iControl}Networking.Tunnel.TunnelDirection'			=> 1,
+                '{urn:iControl}Networking.VLANGroup.VLANGroupTransparency'		=> 1,
+                '{urn:iControl}Networking.iSessionLocalInterface.NatSourceAddress'	=> 1,
+                '{urn:iControl}Networking.iSessionPeerDiscovery.DiscoveryMode'		=> 1,
+                '{urn:iControl}Networking.iSessionPeerDiscovery.FilterMode'		=> 1,
+                '{urn:iControl}Networking.iSessionRemoteInterface.NatSourceAddress'	=> 1,
+                '{urn:iControl}Networking.iSessionRemoteInterface.OriginState'		=> 1,
+                '{urn:iControl}System.CPUMetricType'					=> 1,
+                '{urn:iControl}System.FanMetricType'					=> 1,
+                '{urn:iControl}System.HardwareType'					=> 1,
+                '{urn:iControl}System.PSMetricType'					=> 1,
+                '{urn:iControl}System.TemperatureMetricType'				=> 1,
+                '{urn:iControl}System.ConfigSync.ConfigExcludeComponent'		=> 1,
+                '{urn:iControl}System.ConfigSync.ConfigIncludeComponent'		=> 1,
+                '{urn:iControl}System.ConfigSync.LoadMode'				=> 1,
+                '{urn:iControl}System.ConfigSync.SaveMode'				=> 1,
+                '{urn:iControl}System.ConfigSync.SyncMode'				=> 1,
+                '{urn:iControl}System.Disk.RAIDStatus'					=> 1,
+                '{urn:iControl}System.Failover.FailoverMode'				=> 1,
+                '{urn:iControl}System.Failover.FailoverState'				=> 1,
+                '{urn:iControl}System.Services.ServiceAction'				=> 1,
+                '{urn:iControl}System.Services.ServiceStatusType'			=> 1,
+                '{urn:iControl}System.Services.ServiceType'				=> 1,
+                '{urn:iControl}System.Statistics.GtmIQueryState'			=> 1,
+                '{urn:iControl}System.Statistics.GtmPathStatisticObjectType'		=> 1,
 	};
 
 	package BigIP::iControlDeserializer;
@@ -434,14 +445,14 @@ The protocol with to use for communications with the iControl API (should be eit
 =cut
 
 sub new {
-	my ($class, %args) 	= @_;
+	my ($class, %args)	= @_;
         @_ == 11		or croak 'Not enough arguments for constructor';
-	my $self 		= bless {}, $class;
-        defined $args{server}	? $self->{server} 	= $args{server}		: croak 'Constructor failed: server not defined';
-	defined $args{username}	? $self->{username} 	= $args{username}	: croak 'Constructor failed: username not defined';
-	defined $args{password}	? $self->{password} 	= $args{password}	: croak 'Constructor failed: password not defined';
-	defined $args{port}	? $self->{port} 	= $args{port}		: croak 'Constructor failed: port not defined';
-	defined $args{proto}	? $self->{proto} 	= $args{proto}		: croak 'Constructor failed: proto not defined';
+	my $self		= bless {}, $class;
+        defined $args{server}	? $self->{server}	= $args{server}		: croak 'Constructor failed: server not defined';
+	defined $args{username}	? $self->{username}	= $args{username}	: croak 'Constructor failed: username not defined';
+	defined $args{password}	? $self->{password}	= $args{password}	: croak 'Constructor failed: password not defined';
+	defined $args{port}	? $self->{port}		= $args{port}		: croak 'Constructor failed: port not defined';
+	defined $args{proto}	? $self->{proto}	= $args{proto}		: croak 'Constructor failed: proto not defined';
 	$self->{_client}	= SOAP::Lite	->proxy($self->{proto}.'://'.$self->{username}.':'.$self->{password}.'@'.$self->{server}.':'.$self->{port}.'/iControl/iControlPortal.cgi')
 						->deserializer(BigIP::iControlDeserializer->new());
 	return $self;
@@ -499,8 +510,8 @@ sub _get_username {
 # Our method is then created as an invocation to the private _request method setting the value of the module,
 # interface and method arguments as per the API reference. i.e.
 #
-#  module 	=> 'System'
-#  interface  	=> 'SystemInfo'
+#  module	=> 'System'
+#  interface	=> 'SystemInfo'
 #  method	=> 'get_system_id'
 #
 # Which is intuitively translated into the implementation below;
@@ -632,14 +643,14 @@ The struct information is described below;
 	os_machine				String		The hardware platform CPU type.
 	os_version				String		The version string for the release of the operating system.
 	platform				String		The platform of the device.
-	product_category			String 		The product category of the device.
+	product_category			String		The product category of the device.
 	chassis_serial				String		The chassis serial number.
-	switch_board_serial			String 		The serial number of the switch board.
-	switch_board_part_revision		String 		The part revision number of the switch board.
-	host_board_serial			String 		The serial number of the host motherboard.
-	host_board_part_revision		String 		The part revision number of the host board.
-	annunciator_board_serial		String 		The serial number of the annuciator board.
-	annunciator_board_part_revision		String 		The part revision number of the annunciator board. 
+	switch_board_serial			String		The serial number of the switch board.
+	switch_board_part_revision		String		The part revision number of the switch board.
+	host_board_serial			String		The serial number of the host motherboard.
+	host_board_part_revision		String		The part revision number of the host board.
+	annunciator_board_serial		String		The serial number of the annuciator board.
+	annunciator_board_part_revision		String		The part revision number of the annunciator board. 
 
 =cut
 
@@ -1001,7 +1012,7 @@ Returns all statistics for the specified interface as a hash having the followin
 
 	{
 	timestamp	=> 'YYYY-MM-DD-hh-mm-ss',
-	stats		=> 	{
+	stats		=>	{
 				statistic_1	=> value
 				...
 				statistic_n	=> value
@@ -1016,6 +1027,146 @@ Refer to the official API documentation for the exact structure of the Interface
 sub get_interface_statistics_stringified {
 	my ($self, $inet)=@_;
 	return __process_statistics($self->get_interface_statistics($inet))
+}
+
+=head3 get_trunk_list ()
+
+	my @trunks = $ic->get_trunk_list();
+
+Returns an array of the configured trunks present on the device.
+
+=cut
+
+sub get_trunk_list {
+	return @{$_[0]->_request(module => 'Networking', interface => 'Trunk', method => 'get_list')};
+}
+
+=head3 get_active_trunk_members ()
+
+	print "Trunk $t has " . $ic->get_active_trunk_members() . " active members.\n";
+
+Returns the number of the active members for the specified trunk.
+
+=cut
+
+sub get_active_trunk_members {
+	my ($self, $trunk) = @_;
+	return @{$_[0]->_request(module => 'Networking', interface => 'Trunk', method => 'get_operational_member_count', data => { trunks => [ $trunk ] })}[0]
+}
+
+=head3 get_configured_trunk_members ()
+
+	print "Trunk $t has " . $ic->get_configured_trunk_members() . " configured members.\n";
+
+Returns the number of configured members for the specified trunk.
+
+=cut
+
+sub get_configured_trunk_members {
+	my ($self, $trunk) = @_;
+	return @{$_[0]->_request(module => 'Networking', interface => 'Trunk', method => 'get_configured_member_count', data => { trunks => [ $trunk ] })}[0]
+}
+
+=head3 get_trunk_interfaces ()
+
+	my @t_inets = $ic->get_trunk_interfaces();
+
+Returns an array containing the interfaces of the members of the specified trunk.
+
+=cut
+
+sub get_trunk_interfaces {
+	my ($self, $trunk) = @_;
+	return @{@{$_[0]->_request(module => 'Networking', interface => 'Trunk', method => 'get_interface', data => { trunks => [ $trunk ] })}[0]}
+}
+
+=head3 get_trunk_media_speed ()
+
+	print "Trunk $t operating at " . $ic->get_trunk_media_speed($t) . "Mbps\n";
+
+Returns the current operational media speed (in Mbps) of the specified trunk.
+
+=cut
+
+sub get_trunk_media_speed {
+	my ($self, $trunk) = @_;
+	return @{$_[0]->_request(module => 'Networking', interface => 'Trunk', method => 'get_media_speed', data => { trunks => [ $trunk ] })}[0]
+}
+
+=head3 get_trunk_media_status ()
+
+	print "Trunk $t media status is " . $ic->get_trunk_media_status($t) . "\n";
+
+Returns the current operational media status of the specified trunk.
+
+=cut
+
+sub get_trunk_media_status {
+	my ($self, $trunk) = @_;
+	return @{$_[0]->_request(module => 'Networking', interface => 'Trunk', method => 'get_media_status', data => { trunks => [ $trunk ] })}[0]
+}
+
+=head3 get_trunk_lacp_enabled_state ()
+
+Returns the enabled state of LACP for the specified trunk.
+
+=cut
+
+sub get_trunk_lacp_enabled_state {
+	my ($self, $trunk) = @_;
+	return @{$_[0]->_request(module => 'Networking', interface => 'Trunk', method => 'get_lacp_enabled_state', data => { trunks => [ $trunk ] })}[0]
+}
+
+=head3 get_trunk_lacp_active_state ()
+
+Returns the active state of LACP for the specified trunk.
+
+=cut
+
+sub get_trunk_lacp_active_state {
+	my ($self, $trunk) = @_;
+	return @{$_[0]->_request(module => 'Networking', interface => 'Trunk', method => 'get_active_lacp_state', data => { trunks => [ $trunk ] })}[0]
+}
+
+=head3 get_trunk_statistics ()
+
+Returns the traffic statistics for the specified trunk.  The statistics are returned as a TrunkStatistics object
+hence this method is useful where access to raw statistical data is required.
+
+For parsed statistic data, see B<get_trunk_statistics_stringified>.
+
+For specific information regarding data and units of measurement for statistics methods, please see the B<Notes> section.
+
+=cut
+
+sub get_trunk_statistics {
+	my ($self, $trunk) = @_;
+	return $self->_request(module => 'Networking', interface => 'Trunk', method => 'get_statistics', data => { trunks => [ $trunk ] })
+}
+
+=head3 get_trunk_statistics_stringified ()
+
+Returns all statistics for the specified trunk as a hash of hases with the following structure:
+
+	{	
+		timestamp	=> 'yyyy-mm-dd-hh-mm-ss',
+		stats		=> {
+					stats_1	=> value,
+					stats_3	=> value,
+					...
+					stats_n	=> value
+				}
+	}
+					
+This function accepts a single parameter; the trunk for which the statistics are to be returned.
+
+For specific information regarding data and units of measurement for statistics methods, please see the B<Notes> section.
+
+=cut
+
+sub get_trunk_statistics_stringified {
+	my ($self, $trunk) = @_;
+	return __process_statistics($self->get_trunk_statistics($trunk))
 }
 
 =head3 get_vs_list ()
@@ -1368,7 +1519,7 @@ sub get_pool_member_statistics {
 Returns a hash containing all pool member statistics for the specified pool.  The hash has the following
 structure;
 
-	member_1 => 	{
+	member_1 =>	{
 			timestamp	=> 'YYYY-MM-DD-hh-mm-ss',
 			stats		=>	{
 						statistics_1	=> value
@@ -1705,7 +1856,7 @@ sub create_subscription_list {
 	$args{ttl} =~ /^(-)?\d+$/			or return 'Request error: missing or incorrect "ttl" parameter';	
 	$args{min_events_per_timeslice} =~ /^(-)?\d+$/	or return 'Request error: missing or incorrect "min_events_per_timeslice" parameter';	
 	$args{max_timeslice} =~ /^(-)?\d+$/		or return 'Request error: missing or incorrect "max_timeslice" parameter';	
-	@{$args{event_type}} > 0 			or return 'Request error: missing "event_type" parameter';
+	@{$args{event_type}} > 0			or return 'Request error: missing "event_type" parameter';
 
 	foreach my $event (@{$args{event_type}}) {
 		exists $event_types->{$event}		or return "Request error: unknown \"event_type\" parameter \"$event\"";
