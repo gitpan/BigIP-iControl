@@ -7,7 +7,7 @@ use Carp qw(confess croak);
 use Exporter;
 use SOAP::Lite;
 
-our $VERSION    = '0.05';
+our $VERSION    = '0.06';
 
 =head1 NAME
 
@@ -117,7 +117,10 @@ our $modules    = {
 	Networking	=>	{
 				Interfaces	=>	{
 							get_list		=> 0,
-							get_statistics		=> 'interfaces'
+							get_enabled_state	=> {interfaces => 1},
+							get_media_speed		=> {interfaces => 1},
+							get_media_status	=> {interfaces => 1},
+							get_statistics		=> {interfaces => 1}
 							},
 				Trunk		=>	{
 							get_interface		=> {trunks => 1},
@@ -986,6 +989,39 @@ Retuns an ordered list of all interfaces on the target device.
 
 sub get_interface_list {
 	return sort @{$_[0]->_request(module => 'Networking', interface => 'Interfaces', method => 'get_list')};
+}
+
+=head3 get_interface_enabled_state ($interface)
+
+Returns the enabled state of the specific interface.
+
+=cut
+
+sub get_interface_enabled_state {
+	my ($self, $inet)=@_;
+	return @{$self->_request(module => 'Networking', interface => 'Interfaces', method => 'get_enabled_state', data => { interfaces => [$inet] })}[0]
+}
+
+=head3 get_interface_media_status ($interface)
+
+Returns the media status of the specific interface.
+
+=cut
+
+sub get_interface_media_status {
+	my ($self, $inet)=@_;
+	return @{$self->_request(module => 'Networking', interface => 'Interfaces', method => 'get_media_status', data => { interfaces => [$inet] })}[0]
+}
+
+=head3 get_interface_media_speed ($interface)
+
+Returns the media speed of the specific interface in Mbps.
+
+=cut
+
+sub get_interface_media_speed {
+	my ($self, $inet)=@_;
+	return @{$self->_request(module => 'Networking', interface => 'Interfaces', method => 'get_media_speed', data => { interfaces => [$inet] })}[0]
 }
 
 =head3 get_interface_statistics ($interface)

@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               BigIP-iControl
-version:            0.05
+version:            0.06
 abstract:           A Perl interface to the F5 iControl API
 author:
     - Luke Poskitt <ltp@cpan.org>
