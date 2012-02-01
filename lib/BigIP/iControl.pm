@@ -6,8 +6,9 @@ use warnings;
 use Carp qw(confess croak);
 use Exporter;
 use SOAP::Lite;
+use MIME::Base64;
 
-our $VERSION    = '0.06';
+our $VERSION    = '0.07';
 
 =head1 NAME
 
@@ -456,8 +457,9 @@ sub new {
 	defined $args{password}	? $self->{password}	= $args{password}	: croak 'Constructor failed: password not defined';
 	defined $args{port}	? $self->{port}		= $args{port}		: croak 'Constructor failed: port not defined';
 	defined $args{proto}	? $self->{proto}	= $args{proto}		: croak 'Constructor failed: proto not defined';
-	$self->{_client}	= SOAP::Lite	->proxy($self->{proto}.'://'.$self->{username}.':'.$self->{password}.'@'.$self->{server}.':'.$self->{port}.'/iControl/iControlPortal.cgi')
+	$self->{_client}	= SOAP::Lite	->proxy($self->{proto}.'://'.$self->{server}.':'.$self->{port}.'/iControl/iControlPortal.cgi')
 						->deserializer(BigIP::iControlDeserializer->new());
+	$self->{_client}->transport->http_request->header('Authorization' => 'Basic ' . MIME::Base64::encode("$self->{username}:$self->{password}") );
 	return $self;
 }
 

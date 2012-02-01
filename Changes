@@ -21,10 +21,13 @@ Revision history for BigIP::iControl
 0.041	2011-11-04/17:10:00
 	-Fixes bugs described in CPAN RT #72155
 
-0.50	2011-11-24/14:00:00
+0.05	2011-11-24/14:00:00
 	-New trunk methods; get_trunk_list, get_active_trunk_members, get_configured_trunk_members, get_trunk_interfaces,
 	get_trunk_media_speed, get_trunk_media_status, get_trunk_lacp_enabled_state, get_trunk_statistics and
 	get_trunk_statistics_stringified.
 
-0.60	2100-11-24/15:00:00
+0.06	2011-11-24/15:00:00
 	-New methods get_interface_enabled_state, get_interface_media_speed and get-interface_media_status.
+
+0.07	2012-02-12/09:00:00
+	-Changed authentication method to fix problem with passwords containing the '@' symbol.

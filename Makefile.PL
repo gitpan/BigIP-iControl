@@ -15,7 +15,8 @@ WriteMakefile(
 	'Test::More'	=> 0,
 	'Carp'		=> 0,
 	'Exporter'	=> 0,
-	'SOAP::Lite'	=> 0
+	'SOAP::Lite'	=> 0,
+	'MIME::Base64'	=> 0
     },
     dist                => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
     clean               => { FILES => 'BigIP-iControl-*' },
