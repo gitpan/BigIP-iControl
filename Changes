@@ -1,33 +1,5 @@
-Revision history for BigIP::iControl
+Revision history for BigIP-iControl
 
-0.01	2011-09-19/17:00:00
-        -Initial version. Note that this module was previously available on CPAN as iControl.
+0.01    Date/time
+        First version, released on an unsuspecting world.
 
-0.02	2011-09-30/15:33:00
-	-Functionality and bugfix release.  Compilation is now free of warnings.  Methods for saving UCS archives introduced.
-
-0.03	2011-10-03/16:06:00
-	-Added get_configuration_list and delete_configuration_methods.
-
-0.04	2011-11-02/11:50:00
-	-Included fixes for bug ID #72091.
-	-Included new GTM methods get_gtm_list, get_gtm_vs_enabled_state, get_gtm_pool_members, get_gtm_pool_list,
-	get_gtm_pool_description, get_gtm_vs_all_statistics and new connection methods get_connection_list, 
-	get_all_active_connections and get_active_connections_count.
-	-Changed some existing methods to ltm specific methods so as to avoid conflict with similarly named GTM 
-	methods (thanks to Eric Welch for his feedback and input).
-	-Numerous other fixes and enhancements.
-
-0.041	2011-11-04/17:10:00
-	-Fixes bugs described in CPAN RT #72155
-
-0.05	2011-11-24/14:00:00
-	-New trunk methods; get_trunk_list, get_active_trunk_members, get_configured_trunk_members, get_trunk_interfaces,
-	get_trunk_media_speed, get_trunk_media_status, get_trunk_lacp_enabled_state, get_trunk_statistics and
-	get_trunk_statistics_stringified.
-
-0.06	2011-11-24/15:00:00
-	-New methods get_interface_enabled_state, get_interface_media_speed and get-interface_media_status.
-
-0.07	2012-02-12/09:00:00
-	-Changed authentication method to fix problem with passwords containing the '@' symbol.

@@ -8,7 +8,7 @@ use Exporter;
 use SOAP::Lite;
 use MIME::Base64;
 
-our $VERSION    = '0.07';
+our $VERSION    = '0.091';
 
 =head1 NAME
 
@@ -94,12 +94,14 @@ our $modules    = {
 				Pool		=>	{
 							get_list		=> 0,
 							get_member		=> 'pool_names',
+							get_object_status	=> 'pool_names',
 							get_statistics		=> 'pool_names',
-							get_all_statistics	=> 'pool_names'
+							get_all_statistics	=> 'pool_names',
+							get_member_object_status=> {pool_names => 1, members => 1}
 							},
 				PoolMember	=>	{
 							get_statistics		=> {pool_names => 1, members => 1},
-							get_all_statistics	=> 'pool_names'
+							get_all_statistics	=> 'pool_names',
 							},
 				NodeAddress	=>	{
 							get_list		=> 0,
@@ -409,7 +411,7 @@ sub BEGIN {
 
 =head3 new (%args)
 
-	my $ic = iControl->new(
+	my $ic = BigIP::iControl->new(
 				server		=> 'bigip.company.com',
 				username	=> 'api_user',
 				password	=> 'my_password',
@@ -438,11 +440,12 @@ The password with which to connect to the iControl API.
 
 =item port
 
-The port on which to connect to the iControl API.
+The port on which to connect to the iControl API.  If not specified this value will default to 443.
 
 =item proto
 
-The protocol with to use for communications with the iControl API (should be either http or https).
+The protocol with to use for communications with the iControl API (should be either http or https).  If not specified
+this value will default to https.
 
 =back
 
@@ -450,13 +453,13 @@ The protocol with to use for communications with the iControl API (should be eit
 
 sub new {
 	my ($class, %args)	= @_;
-        @_ == 11		or croak 'Not enough arguments for constructor';
 	my $self		= bless {}, $class;
         defined $args{server}	? $self->{server}	= $args{server}		: croak 'Constructor failed: server not defined';
 	defined $args{username}	? $self->{username}	= $args{username}	: croak 'Constructor failed: username not defined';
 	defined $args{password}	? $self->{password}	= $args{password}	: croak 'Constructor failed: password not defined';
-	defined $args{port}	? $self->{port}		= $args{port}		: croak 'Constructor failed: port not defined';
-	defined $args{proto}	? $self->{proto}	= $args{proto}		: croak 'Constructor failed: proto not defined';
+	$self->{proto}		= ($args{proto} or 'https');
+	$self->{port}		= ($args{port} or '443');
+	#$self->{_client}	= SOAP::Lite	->proxy($self->{proto}.'://'.$self->{username}.':'.$self->{password}.'@'.$self->{server}.':'.$self->{port}.'/iControl/iControlPortal.cgi')
 	$self->{_client}	= SOAP::Lite	->proxy($self->{proto}.'://'.$self->{server}.':'.$self->{port}.'/iControl/iControlPortal.cgi')
 						->deserializer(BigIP::iControlDeserializer->new());
 	$self->{_client}->transport->http_request->header('Authorization' => 'Basic ' . MIME::Base64::encode("$self->{username}:$self->{password}") );
@@ -979,6 +982,28 @@ sub delete_configuration {
 	my ($self,$filename)	= @_;
 	$filename or croak 'No filename specified';
 	return $self->_request(module => 'System', interface => 'ConfigSync', method => 'delete_configuration', data => { filename => $filename });
+}
+
+sub _download_file {
+	my ($self,$config_name,$local_file)	= @_;
+	my $chunk	= 65536;
+	my $offset	= 0;
+	my $data;
+
+	$config_name or croak 'No configuration file specified';
+
+	open my $fh, '+>', $local_file or croak "Unable to open local file: $local_file";
+	binmode($fh);
+
+	while (1) {
+		$data	= $self->_request(module => 'System', interface => 'ConfigSync', method => 'download_configuration', data => {config_name => $config_name, chunk_size => $chunk, file_offset => $offset});
+		print $fh $data->{file_data};
+		last if (($data->{chain_type} eq 'FILE_LAST') or ($data->{chain_type} eq 'FILE_FIRST_AND_LAST'));
+		$offset+=(length($data->{file_data}));		
+	}
+
+	close $fh;
+	return 1	
 }
 
 =head3 get_interface_list ()
@@ -1539,7 +1564,7 @@ sub get_pool_member_statistics {
 	
 	return $self->_request(module => 'LocalLB', interface => 'PoolMember', method => 'get_statistics', data => {
 		pool_names	=> [$pool],
-		members		=> $self->__get_pool_members($pool) });
+		members		=> $self->__get_pool_members($pool,'LocalLB') });
 }
 
 =head3 get_pool_member_statistics_stringified ($pool)
@@ -1591,6 +1616,70 @@ method and the two will likely be merged in a future release.
 sub get_all_pool_member_statistics {
 	my ($self, $pool)= @_;
 	return $self->_request(module => 'LocalLB', interface => 'PoolMember', method => 'get_all_statistics', data => {pool_names => [$pool]});
+}
+
+=head3 get_ltm_pool_status ($pool)
+
+Returns the status of the specified pool as a ObjectStatus object.
+
+For formatted pool status information, see the B<get_ltm_pool_status_as_string()> method.
+
+=cut 
+
+sub get_ltm_pool_status {
+	my ($self, $pool)= @_;
+	return @{$self->_request(module => 'LocalLB', interface => 'Pool', method => 'get_object_status', data => {pool_names => [$pool]})}[0]
+}
+
+=head3 get_ltm_pool_availability_status ($pool)
+
+Retuns the availability status of the specified pool.
+
+=cut 
+
+sub get_ltm_pool_availability_status {
+	my ($self, $pool)= @_;
+	return $self->get_ltm_pool_status_as_string($pool,'availability_status');
+}
+
+=head3 get_ltm_pool_enabled_status ($pool)
+
+Retuns the enabled status of the specified pool.
+
+=cut 
+
+sub get_ltm_pool_enabled_status {
+	my ($self, $pool)= @_;
+	return $self->get_ltm_pool_status_as_string($pool,'enabled_status');
+}
+
+=head3 get_ltm_pool_status_description ($pool)
+
+Returns a descriptive status of the specified pool.
+
+=cut 
+
+sub get_ltm_pool_status_description {
+	my ($self, $pool)= @_;
+	return $self->get_ltm_pool_status_as_string($pool,'status_description');
+}
+
+=head3 get_ltm_pool_status_as_string ($pool)
+
+Returns the pool status as a descriptive string.
+
+=cut 
+
+sub get_ltm_pool_status_as_string {
+	my ($self, $pool, $status_key)= @_;
+	
+	$status_key or ($status_key = 'status_description');
+	
+	return $self->get_ltm_pool_status($pool)->{$status_key};
+}
+
+sub _get_ltm_pool_member_oject_status {
+	my ($self, $pool)
 }
 
 =head3 get_connection_list ()

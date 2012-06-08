@@ -1,3 +1,4 @@
+use 5.006;
 use strict;
 use warnings;
 use ExtUtils::MakeMaker;
@@ -12,9 +13,7 @@ WriteMakefile(
       : ()),
     PL_FILES            => {},
     PREREQ_PM => {
-	'Test::More'	=> 0,
-	'Carp'		=> 0,
-	'Exporter'	=> 0,
+        'Test::More'	=> 0,
 	'SOAP::Lite'	=> 0,
 	'MIME::Base64'	=> 0
     },
