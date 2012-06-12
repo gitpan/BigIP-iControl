@@ -8,7 +8,7 @@ use Exporter;
 use SOAP::Lite;
 use MIME::Base64;
 
-our $VERSION    = '0.091';
+our $VERSION    = '0.092';
 
 =head1 NAME
 
@@ -607,11 +607,12 @@ sub __process_statistics {
 
 sub __process_pool_member_statistics {
 	my $statistics	= shift;
+	my $timestamp	= @{$statistics}[0]->{time_stamp};
 	my %stat_obj;
 
-	foreach (@{$statistics}) {
-		my $node	= @{$_->{statistics}}[0]->{member}->{address}.':'.@{$_->{statistics}}[0]->{member}->{port};
-		$stat_obj{$node} = {__process_statistics($_)};
+	foreach (@{@{$statistics}[0]->{statistics}}) {
+		my $node	= $_->{member}->{address}.':'.$_->{member}->{port};
+		$stat_obj{$node}= {__process_statistics( { time_stamp => $timestamp, statistics => [ $_ ] } )};
 	}
 	
 	return %stat_obj
