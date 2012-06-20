@@ -8,7 +8,7 @@ use Exporter;
 use SOAP::Lite;
 use MIME::Base64;
 
-our $VERSION    = '0.093';
+our $VERSION    = '0.094';
 
 =head1 NAME
 
@@ -149,6 +149,7 @@ our $modules    = {
 							get_configuration_list	=> 0,
 							delete_configuration	=> {filename => 1},
 							save_configuration	=> {filename => 1, save_flag => 1},
+							download_file		=> {file_name => 1, chunk_size => 1, file_offset => 1},
 							download_configuration	=> {config_name => 1, chunk_size => 1, file_offset => 1}
 							},
 				SystemInfo	=>	{
@@ -472,11 +473,10 @@ sub new {
 	defined $args{password}	? $self->{password}	= $args{password}	: croak 'Constructor failed: password not defined';
 	$self->{proto}		= ($args{proto} or 'https');
 	$self->{port}		= ($args{port} or '443');
-	#$self->{_client}	= SOAP::Lite	->proxy($self->{proto}.'://'.$self->{username}.':'.$self->{password}.'@'.$self->{server}.':'.$self->{port}.'/iControl/iControlPortal.cgi')
 	$self->{_client}	= SOAP::Lite	->proxy($self->{proto}.'://'.$self->{server}.':'.$self->{port}.'/iControl/iControlPortal.cgi')
 						->deserializer(BigIP::iControlDeserializer->new());
 	$self->{_client}->transport->http_request->header('Authorization' => 'Basic ' . MIME::Base64::encode("$self->{username}:$self->{password}") );
-	$self->{_client}->transport->ssl_opts( verify_hostname => $args{verify_hostname} );
+	eval { $self->{_client}->transport->ssl_opts( verify_hostname => $args{verify_hostname} ) };
 	return $self;
 }
 
@@ -1019,6 +1019,36 @@ sub _download_file {
 
 	close $fh;
 	return 1	
+}
+
+=head3 download_file ( $FILE )
+
+	# Print the bigip.conf file to the terminal
+	print $ic->download_file('/config/bigip.conf');
+
+This method provides direct access to files on the target system. The method returns a scalar containing
+the contents of the file.
+
+This method may be useful for downloading configuration files for versioning or backups.
+
+=cut
+
+sub download_file {
+	my ($self,$file_name)	= @_;
+	my $chunk	= 65536;
+	my $offset	= 0;
+	my ($data, $output);
+
+	$file_name or croak 'No file name specified';
+
+	while (1) {
+		$data	= $self->_request(module => 'System', interface => 'ConfigSync', method => 'download_file', data => {file_name => $file_name, chunk_size => $chunk, file_offset => $offset});
+		$output .=$data->{file_data};
+		last if (($data->{chain_type} eq 'FILE_LAST') or ($data->{chain_type} eq 'FILE_FIRST_AND_LAST'));
+		$offset+=(length($data->{file_data}));		
+	}
+
+	return $output	
 }
 
 =head3 get_interface_list ()
