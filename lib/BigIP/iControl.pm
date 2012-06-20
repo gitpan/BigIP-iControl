@@ -8,7 +8,7 @@ use Exporter;
 use SOAP::Lite;
 use MIME::Base64;
 
-our $VERSION    = '0.092';
+our $VERSION    = '0.093';
 
 =head1 NAME
 
@@ -112,9 +112,16 @@ our $modules    = {
 							}
 				},
 	Management	=>	{
+				DBVariable	=>	{
+							query			=> 'variables'
+							},
 				EventSubscription=>	{
 							create			=> 'sub_detail_list',
-							get_list		=> 0
+							get_list		=> 0,
+							get_authentication	=> 'id_list',
+							get_state		=> 'id_list',
+							get_url			=> 'id_list',
+							get_proxy_url		=> 'id_list'
 							}
 				},
 	Networking	=>	{
@@ -416,7 +423,8 @@ sub BEGIN {
 				username	=> 'api_user',
 				password	=> 'my_password',
 				port		=> 443,
-				proto		=> 'https'
+				proto		=> 'https',
+				verify_hostname	=> 0
 			);
 
 Constructor method.  Creates a new BigIP::iControl object representing a single interface into the iControl 
@@ -447,6 +455,11 @@ The port on which to connect to the iControl API.  If not specified this value w
 The protocol with to use for communications with the iControl API (should be either http or https).  If not specified
 this value will default to https.
 
+=item verify_hostname
+
+If TRUE when used with a secure connection then the client will ensure that the target server has a valid certificate 
+matching the expected hostname.
+
 =back
 
 =cut
@@ -463,6 +476,7 @@ sub new {
 	$self->{_client}	= SOAP::Lite	->proxy($self->{proto}.'://'.$self->{server}.':'.$self->{port}.'/iControl/iControlPortal.cgi')
 						->deserializer(BigIP::iControlDeserializer->new());
 	$self->{_client}->transport->http_request->header('Authorization' => 'Basic ' . MIME::Base64::encode("$self->{username}:$self->{password}") );
+	$self->{_client}->transport->ssl_opts( verify_hostname => $args{verify_hostname} );
 	return $self;
 }
 
@@ -1900,6 +1914,20 @@ sub __get_gtm_vs_definition {
 	}
 }
 
+=head3 get_db_variable ( $VARIABLE )
+
+	# Prints the value of the configsync.state database variable.
+	print "Config state is " . $ic->get_db_variable('configsync.state') . "\n";
+
+Returns the value of the specified db variable.
+
+=cut
+
+sub get_db_variable {
+	my ($self,$var)	= @_;
+	return @{$self->_request(module => 'Management', interface => 'DBVariable', method => 'query', data => { variables => [$var] })}[0]->{value}
+}
+
 =head3 get_event_subscription
 
 Returns all registered event subscriptions.
@@ -1911,16 +1939,38 @@ sub get_event_subscription {
 	return $self->_request(module => 'Management', interface => 'EventSubscription', method => 'get_list');
 }
 
+sub _get_event_subscription_state {
+	my ($self,$id)	= @_;
+	return @{$self->_request(module => 'Management', interface => 'EventSubscription', method => 'get_state', data => { id_list => [$id]})}[0]
+}
+
+sub _get_event_subscription_url {
+	my ($self,$id)	= @_;
+	return @{$self->_request(module => 'Management', interface => 'EventSubscription', method => 'get_url', data => { id_list => [$id]})}[0]
+}
+
+sub _get_event_subscription_proxy_url {
+	my ($self,$id)	= @_;
+	return @{$self->_request(module => 'Management', interface => 'EventSubscription', method => 'get_proxy_url', data => { id_list => [$id]})}[0]
+}
+
+sub _get_event_subscription_authentication {
+	my ($self,$id)	= @_;
+	return @{$self->_request(module => 'Management', interface => 'EventSubscription', method => 'get_proxy_url', data => { id_list => [$id]})}[0]
+}
+
+sub get_subscription_list {
+	my $self	= shift;
+	my @subs;
+	foreach (@{$self->_request(module => 'Management', interface => 'EventSubscription', method => 'get_list')}){push @subs, $_}
+	return @subs
+}
+
 =head3 get_subscription_list
 
 This method is an analog of B<get_event_subscription>
 
 =cut 
-
-sub get_subscription_list {
-	my $self	= shift;
-	return $self->_request(module => 'Management', interface => 'EventSubscription', method => 'get_list');
-}
 
 =head3 create_subscription_list (%args)
 
