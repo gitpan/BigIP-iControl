@@ -8,7 +8,7 @@ use Exporter;
 use SOAP::Lite;
 use MIME::Base64;
 
-our $VERSION    = '0.094';
+our $VERSION    = '0.095';
 
 =head1 NAME
 
@@ -131,6 +131,10 @@ our $modules    = {
 							get_media_speed		=> {interfaces => 1},
 							get_media_status	=> {interfaces => 1},
 							get_statistics		=> {interfaces => 1}
+							},
+				SelfIP		=>	{
+							get_list		=> 0,
+							get_vlan		=> {self_ips	=> 1}
 							},
 				Trunk		=>	{
 							get_interface		=> {trunks => 1},
@@ -1275,6 +1279,27 @@ For specific information regarding data and units of measurement for statistics 
 sub get_trunk_statistics_stringified {
 	my ($self, $trunk) = @_;
 	return __process_statistics($self->get_trunk_statistics($trunk))
+}
+
+=head3 get_self_ip_list
+
+Returns a list of all self IP addresses on the target device.
+
+=cut
+
+sub get_self_ip_list {
+	return @{$_[0]->_request(module => 'Networking', interface => 'SelfIP', method => 'get_list')}
+}
+
+=head3 get_self_ip_vlan ( $SELF_IP )
+
+Returns the VLAN associated with the specified self IP address on the target device.
+
+=cut
+
+sub get_self_ip_vlan {
+	my ($self, $ip) = @_;
+	return @{$self->_request(module => 'Networking', interface => 'SelfIP', method => 'get_vlan', data => { self_ips => [ $ip ] })}[0]
 }
 
 =head3 get_vs_list ()
