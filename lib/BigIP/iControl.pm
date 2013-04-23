@@ -7,8 +7,9 @@ use Carp qw(confess croak);
 use Exporter;
 use SOAP::Lite;
 use MIME::Base64;
+use Math::BigInt;
 
-our $VERSION    = '0.095';
+our $VERSION    = '0.096';
 
 =head1 NAME
 
@@ -88,8 +89,12 @@ our $modules    = {
 							get_default_pool_name	=> 'virtual_servers',
 							get_destination		=> 'virtual_servers',
 							get_enabled_state	=> 'virtual_servers',
+							get_protocol		=> 'virtual_servers',
 							get_statistics		=> 'virtual_servers',
-							get_all_statistics	=> 0
+							get_all_statistics	=> 0,
+							get_rule		=> 'virtual_servers',
+							get_snat_pool		=> 'virtual_servers',
+							get_snat_type		=> 'virtual_servers'
 							},
 				Pool		=>	{
 							get_list		=> 0,
@@ -109,6 +114,14 @@ our $modules    = {
 							get_object_status	=> 'node_addresses',
 							get_monitor_status	=> 'node_addresses',
 							get_statistics		=> 'node_addresses'
+							},
+				Class		=>	{
+							get_address_class_list	=> 0,
+							get_string_class	=> 'class_names',
+							get_string_class_member_data_value	=> 'class_members',
+							set_string_class_member_data_value	=> {class_members => 1, values => 1},
+							add_string_class_member	=> 'class_members',
+							delete_string_class_member=> 'class_members',
 							}
 				},
 	Management	=>	{
@@ -121,7 +134,9 @@ our $modules    = {
 							get_authentication	=> 'id_list',
 							get_state		=> 'id_list',
 							get_url			=> 'id_list',
-							get_proxy_url		=> 'id_list'
+							get_proxy_url		=> 'id_list',
+							remove			=> 'id_list',
+							query			=> 'id_list'
 							}
 				},
 	Networking	=>	{
@@ -617,7 +632,7 @@ sub __process_statistics {
 
 	foreach (@{@{$statistics->{statistics}}[0]->{statistics}}) {
 		my $type		= $_->{type};
-		$stat_obj{stats}{$type}	= (($_->{value}{high})<<32)|(abs $_->{value}{low});
+		$stat_obj{stats}{$type}	= Math::BigInt->new("0x" . unpack("H*", pack("N2",$_->{value}{high}, $_->{value}{low})))->bstr;
 	}
 	
 	return %stat_obj
@@ -1482,6 +1497,36 @@ sub get_vs_statistics_stringified {
 	return __process_statistics($self->get_vs_statistics($vs));
 }
 
+=head3 get_ltm_vs_rules ($virtual_server)
+
+=cut
+
+sub get_ltm_vs_rules {
+	my ($self, $vs) = @_;
+	return	map	{ $_->[1] } 
+		sort	{ $a->[0] <=> $b->[0] } 
+		map	{ [ $_->{priority}, $_->{rule_name} ] }
+		@{@{$self->_request(module => 'LocalLB', interface => 'VirtualServer', method => 'get_rule', data => {virtual_servers => [$vs]})}[0]}
+}
+
+=head3 get_ltm_snat_pool ($virtual_server)
+
+=cut
+
+sub get_ltm_snat_pool {
+	my($self, $vs) = @_;
+	return @{$self->_request(module => 'LocalLB', interface => 'VirtualServer', method => 'get_snat_pool', data => {virtual_servers => [$vs]})}[0]
+}
+
+=head3 get_ltm_snat_type ($virtual_server)
+
+=cut
+
+sub get_ltm_snat_type {
+	my($self, $vs) = @_;
+	return @{$self->_request(module => 'LocalLB', interface => 'VirtualServer', method => 'get_snat_type', data => {virtual_servers => [$vs]})}[0]
+}
+
 =head3 get_default_pool_name ($virtual_server)
 
 	print "Virtual Server: $virtual_server\nDefault Pool: ", 
@@ -1493,7 +1538,7 @@ Returns the default pool names for the specified virtual server.
 
 sub get_default_pool_name {
 	my ($self, $vs)=@_;
-	return $self->_request(module => 'LocalLB', interface => 'VirtualServer', method => 'get_default_pool_name', data => {virtual_servers => [$vs]})
+	return @{$self->_request(module => 'LocalLB', interface => 'VirtualServer', method => 'get_default_pool_name', data => {virtual_servers => [$vs]})}[0]
 }
 
 =head3 get_pool_list ()
@@ -1969,6 +2014,108 @@ sub __get_gtm_vs_definition {
 	}
 }
 
+=head3 get_ltm_address_class_list ()
+
+Returns a list of all existing address classes.
+
+=cut
+
+sub get_ltm_address_class_list {
+        return @{ $_[0]->_request(module => 'LocalLB', interface => 'Class', method => 'get_address_class_list') }
+}
+
+=head3 get_ltm_string_class ( $class_name )
+
+Return the specified LTM string class.
+
+=cut
+
+sub get_ltm_string_class {
+	my ( $self, $class ) = @_;
+        return @{ $self->_request(module => 'LocalLB', interface => 'Class', method => 'get_string_class', data => { class_names => [ $class ] } ) }[0]
+}
+
+=head3 get_ltm_string_class_members ( $class )
+
+Returns the specified LTM string class members.
+
+=cut
+
+sub get_ltm_string_class_members {
+	my ( $self, $class ) = @_;
+	return $self->_request( module => 'LocalLB', interface => 'Class', method => 'get_string_class_member_data_value', data => { class_members => 
+        			[ @{ $self->_request(module => 'LocalLB', interface => 'Class', method => 'get_string_class', data => { class_names => [ $class ] } ) }[0] ] } )
+}
+
+=head3 add_ltm_string_class_member ( $class, $member )
+
+Add the provided member to the specified class.
+
+=cut
+
+sub add_ltm_string_class_member {
+	my ( $self, $class, $member ) = @_;
+	$self->_request(	module		=> 'LocalLB',
+				interface	=> 'Class',
+				method		=> 'add_string_class_member',
+				data		=> {
+						class_members	=> [
+								     {
+								   	name	=> $class,
+									members => [ $member ]
+								     }
+								]
+						}
+			)
+}
+
+=head3 delete_ltm_string_class_member ( $class, $member )
+
+Deletes the provided member from the specified class.
+
+=cut
+
+sub delete_ltm_string_class_member {
+	my ( $self, $class, $member ) = @_;
+	$self->_request(	module		=> 'LocalLB',
+				interface	=> 'Class',
+				method		=> 'delete_string_class_member',
+				data		=> {
+						class_members	=> [
+								     {
+								   	name	=> $class,
+									members => [ $member ]
+								     }
+								]
+						}
+			)
+}
+
+=head3 set_ltm_string_class_member ( $class, $member, value )
+
+Sets the value of the member to the provided value in the specified class.
+
+=cut
+
+sub set_ltm_string_class_member {
+	my ( $self, $class, $member, $value ) =	@_;
+	$self->_request(	module 		=> 'LocalLB', 
+				interface	=> 'Class', 
+				method		=> 'set_string_class_member_data_value', 
+				data 		=> {
+						class_members	=> [ 
+								     { 
+									name	=> $class, 
+									members => [ $member ] 
+								     } 
+								   ], 
+						values		=> [ 
+									[ $value ] 
+								   ] 
+						} 
+			)
+}
+
 =head3 get_db_variable ( $VARIABLE )
 
 	# Prints the value of the configsync.state database variable.
@@ -1983,35 +2130,61 @@ sub get_db_variable {
 	return @{$self->_request(module => 'Management', interface => 'DBVariable', method => 'query', data => { variables => [$var] })}[0]->{value}
 }
 
-=head3 get_event_subscription
+=head3 get_event_subscription_list
 
-Returns all registered event subscriptions.
+Returns an array of event subscription IDs for all registered event subscriptions.
 
 =cut 
 
-sub get_event_subscription {
+sub get_event_subscription_list {
 	my ($self, %args)=@_;
 	return $self->_request(module => 'Management', interface => 'EventSubscription', method => 'get_list');
 }
 
-sub _get_event_subscription_state {
-	my ($self,$id)	= @_;
-	return @{$self->_request(module => 'Management', interface => 'EventSubscription', method => 'get_state', data => { id_list => [$id]})}[0]
+=head3 get_event_subscription
+
+=cut
+
+sub get_event_subscription {
+	my ($self, $id)=@_;
+	return $self->_request(module => 'Management', interface => 'EventSubscription', method => 'query', data => { id_list => [$id] })
 }
 
-sub _get_event_subscription_url {
+=head3 remove_event_subscription
+
+=cut
+
+sub remove_event_subscription {
+	my ($self, $id)=@_;
+	return $self->_request(module => 'Management', interface => 'EventSubscription', method => 'remove', data => { id_list => [$id] })
+}
+
+=head3 get_event_subscription_state
+
+=cut
+
+sub _get_event_subscription_state {
 	my ($self,$id)	= @_;
-	return @{$self->_request(module => 'Management', interface => 'EventSubscription', method => 'get_url', data => { id_list => [$id]})}[0]
+	return @{$self->_request(module => 'Management', interface => 'EventSubscription', method => 'get_state', data => { id_list => [$id] })}[0]
+}
+
+=head3 get_event_subscription_url
+
+=cut
+
+sub get_event_subscription_url {
+	my ($self,$id)	= @_;
+	return @{$self->_request(module => 'Management', interface => 'EventSubscription', method => 'get_url', data => { id_list => [$id] })}[0]
 }
 
 sub _get_event_subscription_proxy_url {
 	my ($self,$id)	= @_;
-	return @{$self->_request(module => 'Management', interface => 'EventSubscription', method => 'get_proxy_url', data => { id_list => [$id]})}[0]
+	return @{$self->_request(module => 'Management', interface => 'EventSubscription', method => 'get_proxy_url', data => { id_list => [$id] })}[0]
 }
 
 sub _get_event_subscription_authentication {
 	my ($self,$id)	= @_;
-	return @{$self->_request(module => 'Management', interface => 'EventSubscription', method => 'get_proxy_url', data => { id_list => [$id]})}[0]
+	return @{$self->_request(module => 'Management', interface => 'EventSubscription', method => 'get_proxy_url', data => { id_list => [$id] })}[0]
 }
 
 sub get_subscription_list {
@@ -2084,8 +2257,8 @@ sub create_subscription_list {
 	my ($self, %args)=@_;
 	$args{name}					or return 'Request error: missing "name" parameter';
 	$args{url}					or return 'Request error: missing "url" parameter';	
-	$args{username}					or return 'Request error: missing "username" parameter';	
-	$args{password}					or return 'Request error: missing "password" parameter';	
+	#$args{username}					or return 'Request error: missing "username" parameter';	
+	#$args{password}					or return 'Request error: missing "password" parameter';	
 	$args{ttl} =~ /^(-)?\d+$/			or return 'Request error: missing or incorrect "ttl" parameter';	
 	$args{min_events_per_timeslice} =~ /^(-)?\d+$/	or return 'Request error: missing or incorrect "min_events_per_timeslice" parameter';	
 	$args{max_timeslice} =~ /^(-)?\d+$/		or return 'Request error: missing or incorrect "max_timeslice" parameter';	
@@ -2100,9 +2273,9 @@ sub create_subscription_list {
 				event_type_list			=> [@{$args{event_type}}],
 				url				=> $args{url},
 				url_credentials			=> {
-									auth_mode	=> 'AUTHMODE_BASIC',
-									username	=> $args{username},
-									password	=> $args{password}
+									auth_mode	=> 'AUTHMODE_NONE',
+									#username	=> $args{username},
+									#password	=> $args{password}
 								},
 				ttl				=> $args{ttl},
 				min_events_per_timeslice	=> $args{min_events_per_timeslice},
